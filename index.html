@@ -1441,13 +1441,15 @@ async function renderAdmin(){
   $('#catFile').addEventListener('change', async ev => {
     const f = ev.target.files && ev.target.files[0]; ev.target.value = '';
     const out = $('#catMsg'); if (!f) return;
+    const fileInfo = ' (الملف المختار: ' + f.name + ' · ' + Math.round(f.size / 1024).toLocaleString('en') + ' KB)';
     try {
-      const o = JSON.parse(await f.text());
+      let o;
+      try { o = JSON.parse(await f.text()); } catch (e) { throw new Error('bad'); }
       if (!o || !Array.isArray(o.it) || !o.it.length || !Array.isArray(o.it[0]) || o.it[0].length < 5) throw new Error('bad');
       msg(out, 'warn', 'جارٍ رفع ' + o.it.length + ' صنف…');
       await window.__admin.saveCatalog(o);
       msg(out, 'good', 'تم رفع ' + o.it.length + ' صنف. أعد فتح الصفحة لتظهر الأصناف الجديدة.');
-    } catch (e) { msg(out, 'bad', 'تعذّر الرفع: ' + (e && e.message === 'bad' ? 'الملف ليس قاعدة أصناف صحيحة.' : (e && (e.code || e.message)) || 'خطأ')); }
+    } catch (e) { msg(out, 'bad', 'تعذّر الرفع: ' + (e && e.message === 'bad' ? 'الملف ليس قاعدة أصناف صحيحة' + fileInfo + '. اختر ملف catalog_final.json وحجمه نحو 1,175 KB.' : (e && (e.code || e.message)) || 'خطأ')); }
   });
 }
 showForm(); renderCols(); render(); setStatus(); connect(); renderAdmin();
