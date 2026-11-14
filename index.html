@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>جرد الصيدلية</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+/* Layout idea: one narrow column built for a phone at the shelf: store switch, three tabs, big touch fields. */
+:root{
+  --bg:#eef2f3; --card:#ffffff; --ink:#15262b; --muted:#566b71; --line:#d3dfe1;
+  --brand:#0e6b5c; --brand-press:#0a4f44; --on-brand:#ffffff; --soft:#e3f1ee;
+  --warn:#8a5200; --warn-bg:#fff1d6; --bad:#b3261e; --bad-bg:#fde7e5; --good:#1b7a43; --good-bg:#dff3e6;
+  --font:'IBM Plex Sans Arabic',system-ui,-apple-system,'Segoe UI',Tahoma,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1a1d; --card:#17252a; --ink:#e6f0f1; --muted:#9db3b8; --line:#2a3d43;
+    --brand:#3cc2a9; --brand-press:#74dcc8; --on-brand:#06201b; --soft:#1c3a37;
+    --warn:#f2b45a; --warn-bg:#3a2c12; --bad:#ff8a80; --bad-bg:#3b1c19; --good:#6fd39a; --good-bg:#17382a;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1a1d; --card:#17252a; --ink:#e6f0f1; --muted:#9db3b8; --line:#2a3d43;
+  --brand:#3cc2a9; --brand-press:#74dcc8; --on-brand:#06201b; --soft:#1c3a37;
+  --warn:#f2b45a; --warn-bg:#3a2c12; --bad:#ff8a80; --bad-bg:#3b1c19; --good:#6fd39a; --good-bg:#17382a;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--font);-webkit-text-size-adjust:100%}
+.wrap{max-width:720px;margin:0 auto;padding:16px 16px 72px;display:flex;flex-direction:column;gap:14px}
+h1{font-size:22px;margin:0;font-weight:700;letter-spacing:0}
+h2{font-size:17px;margin:0 0 10px;font-weight:600}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.status{font-size:13px;padding:4px 10px;border-radius:999px;background:var(--soft);color:var(--ink);display:inline-flex;gap:6px;align-items:center}
+.status i{width:8px;height:8px;border-radius:50%;background:var(--good);display:inline-block}
+.status.local i{background:var(--warn)}
+.status.err i{background:var(--bad)}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+.seg button{border:0;background:transparent;padding:12px 8px;border-radius:9px;font-weight:600;cursor:pointer;min-height:48px}
+.seg button[aria-pressed="true"]{background:var(--brand);color:var(--on-brand)}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.tile b{display:block;font-size:24px;line-height:1.2;font-variant-numeric:tabular-nums}
+.tile span{font-size:12.5px;color:var(--muted)}
+.tabs{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border-bottom:2px solid var(--line)}
+.tabs button{background:none;border:0;padding:12px 6px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;min-height:48px}
+.tabs button[aria-selected="true"]{color:var(--brand);border-bottom-color:var(--brand)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field label{font-size:14px;color:var(--muted);font-weight:500}
+input[type=text],input[type=search],input[type=number],input:not([type]),select{
+  width:100%;min-height:50px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);font-size:18px}
+input:focus{border-color:var(--brand);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 25%,transparent)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{min-height:50px;padding:10px 18px;border-radius:10px;border:1.5px solid var(--brand);background:var(--brand);color:var(--on-brand);font-weight:700;cursor:pointer}
+.btn:hover{background:var(--brand-press);border-color:var(--brand-press)}
+.btn.ghost{background:transparent;color:var(--brand)}
+.btn.ghost:hover{background:var(--soft)}
+.btn.small{min-height:40px;padding:6px 12px;font-size:15px}
+.btn.danger{border-color:var(--bad);color:var(--bad);background:transparent}
+.btn.danger.arm{background:var(--bad);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.actions .btn{flex:1 1 140px}
+.scanrow{display:flex;gap:8px}
+.scanrow input{flex:1;min-width:0}
+.camBtn{min-width:58px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center}
+[hidden]{display:none !important}
+.sug{display:flex;flex-direction:column;margin-top:8px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.sug button{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;gap:10px;align-items:center;padding:11px 12px;border-bottom:1px solid var(--line);cursor:pointer;min-height:48px}
+.sug button:last-child{border-bottom:0}
+.sug button:hover,.sug button:focus-visible{background:var(--soft)}
+.sug small{color:var(--muted);white-space:nowrap}
+.sel-name{font-size:19px;font-weight:700;line-height:1.35;direction:ltr;text-align:right;unicode-bidi:plaintext}
+.meta{font-size:13.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 2px}
+.chip{border:1.5px solid var(--line);background:var(--bg);border-radius:999px;padding:6px 12px;font-size:15px;cursor:pointer;min-height:40px;font-variant-numeric:tabular-nums}
+.chip[aria-pressed="true"]{border-color:var(--brand);background:var(--soft);font-weight:700}
+.chip.done::after{content:" ✓";color:var(--good);font-weight:700}
+.chips-label{font-size:13px;color:var(--muted);margin-top:10px}
+.note{font-size:14px;padding:8px 12px;border-radius:10px;margin-top:10px}
+.note.warn{background:var(--warn-bg);color:var(--warn)}
+.note.bad{background:var(--bad-bg);color:var(--bad)}
+.note.good{background:var(--good-bg);color:var(--good)}
+.radios{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:15px}
+.radios label{display:flex;gap:6px;align-items:center;min-height:36px}
+.idle{color:var(--muted);text-align:center;padding:10px 4px}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.item .nm{font-weight:600;direction:ltr;text-align:right;unicode-bidi:plaintext;overflow-wrap:anywhere}
+.item .qty{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;text-align:center;min-width:56px}
+.item .qty small{display:block;font-size:12px;font-weight:400;color:var(--muted)}
+.item .ops{grid-column:1 / -1;display:flex;gap:8px;justify-content:flex-start}
+.pill{display:inline-block;font-size:12.5px;padding:1px 9px;border-radius:999px;background:var(--soft);margin-inline-end:6px}
+.pill.new{background:var(--warn-bg);color:var(--warn)}
+.pill.exp{background:var(--bad-bg);color:var(--bad)}
+.pill.soon{background:var(--warn-bg);color:var(--warn)}
+.cols{width:100%;border-collapse:collapse;font-size:15px}
+.cols td{padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
+.cols input[type=text]{min-height:42px;font-size:16px;padding:6px 10px}
+.cols .mv button{all:unset;cursor:pointer;padding:6px 9px;border-radius:8px;border:1px solid var(--line);min-width:34px;text-align:center}
+.cols .mv button:hover{background:var(--soft)}
+.toast{position:fixed;inset-inline:16px;bottom:18px;max-width:420px;margin:0 auto;background:var(--ink);color:var(--bg);padding:12px 16px;border-radius:12px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.25);opacity:0;transform:translateY(12px);transition:opacity .2s,transform .2s;pointer-events:none;z-index:5}
+.toast.on{opacity:1;transform:none}
+details summary{cursor:pointer;font-weight:600;padding:6px 0;min-height:40px}
+.ltr{direction:ltr;unicode-bidi:plaintext}
+.muted{color:var(--muted)}
+.hint{font-size:13.5px;color:var(--muted);margin-top:6px}
+.rvcard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.rvcard .nm{font-weight:600;direction:ltr;text-align:right;unicode-bidi:plaintext;overflow-wrap:anywhere}
+.rrow{display:flex;gap:10px;align-items:center;justify-content:space-between;border-top:1px dashed var(--line);padding-top:6px}
+.rvact{display:flex;gap:8px;align-items:center}
+.rvact input{min-height:42px;font-size:16px;flex:1;min-width:0}
+.badge{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:var(--bad);color:#fff;font-size:12px;margin-inline-start:4px;line-height:20px}
+.confirm{display:flex;gap:8px;align-items:flex-start;margin-top:8px;font-size:15px}
+.cand{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.cand:last-child{border-bottom:0}
+.cand .nm{direction:ltr;text-align:right;unicode-bidi:plaintext;font-weight:600}
+.sec{display:flex;flex-direction:column;gap:10px}
+.top .who{display:flex;align-items:center;gap:8px;min-width:0}
+.logout{min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--muted);font:inherit;font-size:13px;cursor:pointer}
+.logout.arm{border-color:var(--bad);color:var(--bad)}
+.stf{display:flex;justify-content:space-between;gap:8px;border-top:1px dashed var(--line);padding:6px 0;font-size:14px}
+@media (prefers-reduced-motion: reduce){.toast{transition:none}}
+@media (max-width:380px){.tiles{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}}
+
+body:not(.ready) .wrap{display:none}
+#login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
+#login .box{width:100%;max-width:380px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:14px}
+#login h1{margin:0;font-size:22px}
+#loginErr{color:var(--bad);font-size:14px;min-height:20px}
+#login input{width:100%}
+</style>
+</head>
+<body>
+<div id="login">
+  <div class="box">
+    <h1>جرد الصيدلية</h1>
+    <p id="loginText" class="hint" style="margin:0"></p>
+    <form id="loginForm" hidden autocomplete="on">
+      <div class="field"><label for="lgUser">اسم المستخدم</label><input id="lgUser" name="username" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" class="ltr"></div>
+      <div class="field" style="margin-top:10px"><label for="lgPass">كلمة المرور</label><input id="lgPass" name="password" type="password" autocomplete="current-password"></div>
+      <div id="loginErr" role="alert"></div>
+      <button class="btn" id="lgBtn" type="submit" style="width:100%">دخول</button>
+    </form>
+    <div id="loginWait" hidden></div>
+  </div>
+</div>
+<div class="wrap">
+  <div class="top">
+    <h1>جرد الصيدلية</h1>
+    <div class="who"><span class="status local" id="status" role="status"><i></i><span id="statusText">يُحفظ على هذا الجهاز</span></span><button type="button" class="logout" id="logoutBtn" hidden>خروج</button></div>
+  </div>
+
+  <div class="seg" role="group" aria-label="المخزن">
+    <button type="button" id="st1" aria-pressed="true">مخزن الصيدلية</button>
+    <button type="button" id="st2" aria-pressed="false">المخزن الداخلي</button>
+  </div>
+
+  <div class="tiles" aria-live="polite">
+    <div class="tile"><b id="tLines">0</b><span>أسطر مجرودة</span></div>
+    <div class="tile"><b id="tItems">0</b><span>أصناف مجرودة</span></div>
+    <div class="tile"><b id="tLeft">0</b><span>متبقٍ من القائمة</span></div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" id="tabEntry" aria-selected="true">إدخال</button>
+    <button type="button" role="tab" id="tabList" aria-selected="false">المجرود</button>
+    <button type="button" role="tab" id="tabReview" aria-selected="false">مراجعة<span class="badge" id="rvBadge" hidden>0</span></button>
+    <button type="button" role="tab" id="tabExport" aria-selected="false">تصدير</button>
+  </div>
+
+  <!-- ENTRY -->
+  <section id="pEntry">
+    <div class="card">
+      <div id="apBanner" class="note bad" hidden style="margin:0 0 12px"></div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="who">اسم العدّاد أو الجهاز (يظهر بجانب ما تجرده)</label>
+        <input id="who" type="text" maxlength="24" autocomplete="off" placeholder="مثال: جوال 1">
+      </div>
+      <div class="field">
+        <label for="scan">امسح الباركود أو اكتب اسم الصنف أو رقمه</label>
+        <div class="scanrow">
+          <input id="scan" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="باركود أو اسم الصنف أو رقمه">
+          <button type="button" class="btn camBtn" id="camBtn" aria-label="مسح الباركود بالكاميرا" title="مسح الباركود بالكاميرا"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M11 8v8M15 8v8M18 8v8"/></svg></button>
+        </div>
+        <input id="cam" type="file" accept="image/*" capture="environment" hidden>
+        <div class="hint">زر الكاميرا يفتح كاميرا الجوال: صوّر الباركود وحده وسيُقرأ تلقائياً.</div>
+      </div>
+      <div class="sug" id="sug" hidden></div>
+
+      <div id="idle" class="idle">ابدأ بمسح باركود أو بالبحث عن صنف في قاعدة الأصناف.</div>
+
+      <div id="formCard" hidden>
+        <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+        <div id="selHead"></div>
+        <div id="newFields" hidden>
+          <div class="field" style="margin-top:8px"><label for="nName">اسم الصنف</label><input id="nName" type="text" autocomplete="off"></div>
+          <div class="grid2" style="margin-top:8px">
+            <div class="field"><label for="nBc">الباركود</label><input id="nBc" type="text" inputmode="numeric" autocomplete="off" class="ltr"></div>
+            <div class="field"><label for="nUnit">الوحدة</label><input id="nUnit" type="text" autocomplete="off" placeholder="باكت / علبة / فيالة"></div>
+          </div>
+          <div class="field" style="margin-top:8px"><label for="nCo">الشركة</label><input id="nCo" type="text" autocomplete="off" list="coList" placeholder="اسم الشركة أو المورّد"><datalist id="coList"></datalist></div>
+          <div id="nHint"></div>
+        </div>
+        <div id="chipsBox"></div>
+        <div id="prevInfo"></div>
+        <div class="grid2" style="margin-top:12px">
+          <div class="field"><label for="qty" id="qtyLabel">الكمية</label><input id="qty" type="text" inputmode="decimal" autocomplete="off" class="ltr"></div>
+          <div class="field"><label for="exp">تاريخ الانتهاء</label><input id="exp" type="text" inputmode="numeric" autocomplete="off" placeholder="0327 أو 03/2027" class="ltr"></div>
+        </div>
+        <div id="expHint" class="hint">اكتب الشهر والسنة، مثل 0327 أو 03/2027. اتركه فارغاً إن لم يوجد تاريخ.</div>
+        <div id="dupBox" hidden></div>
+        <div id="othBox"></div>
+        <div id="formMsg"></div>
+        <div class="actions">
+          <button type="button" class="btn" id="saveBtn">حفظ</button>
+          <button type="button" class="btn ghost" id="cancelBtn">إلغاء</button>
+        </div>
+      </div>
+      <div class="actions" id="newBtnRow"><button type="button" class="btn ghost small" id="newItemBtn">صنف غير موجود في قاعدة الأصناف؟</button></div>
+    </div>
+
+    <div style="margin-top:14px">
+      <h2>آخر ما أُدخل</h2>
+      <div class="list" id="recent"></div>
+    </div>
+  </section>
+
+  <!-- LIST -->
+  <section id="pList" hidden>
+    <div class="card" style="margin-bottom:10px">
+      <div class="field"><label for="listQ">بحث في المجرود</label><input id="listQ" type="search" autocomplete="off" placeholder="اسم الصنف أو رقمه أو باركوده"></div>
+      <label class="confirm"><input type="checkbox" id="showVoid"> إظهار ما استُبعد (للتراجع عنه)</label>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="actions"><button type="button" class="btn ghost" id="moreBtn" hidden>عرض المزيد</button></div>
+  </section>
+
+  <!-- REVIEW -->
+  <section id="pReview" hidden>
+    <div class="sec">
+      <div class="card"><h2>حالة الجرد المشترك</h2><div id="rvSummary"></div></div>
+      <div class="card"><h2>أصناف تحتاج قراراً</h2><div id="rvConf" class="sec"></div></div>
+      <div class="card"><h2>أصناف جديدة قد تكون مكررة</h2><div id="rvLinks" class="sec"></div></div>
+      <div class="card"><h2>عدّان متطابقان</h2><p class="hint" style="margin-top:0">يُحسبان عدّاً واحداً ولا يُجمعان. اجمعهما فقط إن كانا لرفّين أو دفعتين مختلفتين.</p><div id="rvMatch" class="sec"></div></div>
+      <div class="card"><h2>قرارات سابقة</h2><div id="rvDone" class="sec"></div></div>
+      <div class="card" id="adminCard" hidden><h2>إدارة (للمشرف)</h2>
+        <p class="hint" style="margin-top:0">إضافة الموظفين وإلغاؤهم يتمّان من لوحة Firebase (انظر دليل الإعداد). هنا قائمة المسجّلين وأداة رفع قاعدة الأصناف.</p>
+        <div id="staffList"></div>
+        <div class="field" style="margin-top:10px"><label for="catFile">رفع قاعدة الأصناف (ملف catalog.json)</label><input id="catFile" type="file" accept=".json,application/json"></div>
+        <div id="catMsg"></div>
+      </div>
+      <div class="card"><h2>النسخة الاحتياطية والاعتماد</h2>
+        <div id="rvSession"></div>
+        <div class="actions"><button type="button" class="btn ghost" id="bkBtn">تنزيل نسخة احتياطية (JSON)</button></div>
+        <label class="confirm"><input type="checkbox" id="bkSkip"> أتخطى النسخة الاحتياطية</label>
+        <div id="rvMsg"></div>
+        <div id="apWhy" class="hint"></div>
+        <div class="actions"><button type="button" class="btn" id="apBtn">اعتماد الجرد</button><button type="button" class="btn ghost" id="reopenBtn" hidden>إعادة فتح الجرد</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EXPORT -->
+  <section id="pExport" hidden>
+    <div class="card">
+      <h2>ملف الاستيراد لمحضر الجرد</h2>
+      <div class="radios" role="radiogroup" aria-label="نطاق التصدير">
+        <label><input type="radio" name="scope" value="cur" checked> المخزن المختار فقط</label>
+        <label><input type="radio" name="scope" value="all"> المخزنان معاً</label>
+      </div>
+      <div id="expSummary" class="hint"></div>
+      <div class="actions">
+        <button type="button" class="btn" id="xlsxBtn">تنزيل Excel</button>
+        <button type="button" class="btn ghost" id="csvBtn">تنزيل CSV</button>
+        <button type="button" class="btn ghost" id="copyBtn">نسخ للصق</button>
+      </div>
+      <div id="expMsg"></div>
+      <p class="hint">يحتوي ملف Excel على ورقة المجرود (الأرقام المحسومة فقط)، وورقة «أصناف جديدة»، وورقة «تحتاج مراجعة» للأصناف التي اختلف فيها العدّ، وورقة «لم تُجرد بعد»، وورقة «سجل العدّات» بكل ما أدخله كل موظف ووقته. ما يحتاج مراجعة لا يدخل ورقة الاستيراد.</p>
+      <p class="hint"><b>مهم:</b> استورد ملف Excel كما نزّلته. لا تفتح ملف CSV أو تلصق النص في Excel ثم تحفظه، لأن Excel يحوّل رقم صنف مثل 05-4947 إلى تاريخ ويتلف الرمز.</p>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <h2>قاعدة الأصناف</h2>
+      <div id="dbSummary" class="hint"></div>
+      <div class="actions"><button type="button" class="btn ghost" id="dbBtn">تنزيل قاعدة الأصناف (Excel)</button></div>
+      <p class="hint">الاسم والباركود والشركة لكل الأصناف، بما فيها ما رصيده صفر، مع الأصناف الجديدة التي أضفتها.</p>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <details id="setDet">
+        <summary>إعداد أعمدة الملف</summary>
+        <p class="hint">إذا طلب محضر الجرد أعمدة بأسماء أو ترتيب مختلف، غيّرها هنا ثم نزّل الملف من جديد.</p>
+        <div class="actions" style="margin-top:6px">
+          <button type="button" class="btn ghost small" id="presetAr">أعمدة عربية</button>
+          <button type="button" class="btn ghost small" id="presetEn">مثل ملف 434 (ID, Name, Qty…)</button>
+          <button type="button" class="btn ghost small" id="presetCode">رمز الصنف + الكمية فقط</button>
+          <button type="button" class="btn ghost small" id="presetPrint">مثل ورقة محضر الجرد المطبوعة</button>
+        </div>
+        <div class="field" style="margin-top:10px">
+          <label for="dateFmt">صيغة تاريخ الانتهاء في الملف</label>
+          <select id="dateFmt"><option value="dmy">01/03/2027</option><option value="my">03/2027</option></select>
+        </div>
+        <table class="cols" id="colsTbl" aria-label="الأعمدة"></table>
+      </details>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+window.__startApp = function(){
+const CAT = window.__CAT || {co: [], un: [], it: []};
+/* قاعدة الأصناف: كل أصناف بيتاسيس (بما فيها الرصيد صفر) مدمجة مع قوائم الجرد.
+   s = 0 يعني أن الصنف في القاعدة فقط وليس في قوائم الجرد. c = الشركة. bs = كل الباركودات. */
+const CATALOG = CAT.it.map(r => ({i: r[0], bs: r[1] ? r[1].split('|') : [], b: r[1] ? r[1].split('|')[0] : '', n: r[2], u: CAT.un[r[3]], c: CAT.co[r[4]], s: r[5], e: r[6] ? r[6].split('|') : []}));
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const latin = s => String(s == null ? '' : s).replace(/[٠-٩]/g, d => d.charCodeAt(0) - 0x660).replace(/[۰-۹]/g, d => d.charCodeAt(0) - 0x6F0).replace(/٫/g, '.').replace(/،/g, ',');
+const pad2 = n => String(n).padStart(2, '0');
+const STORE = {1: 'مخزن الصيدلية', 2: 'المخزن الداخلي'};
+const STORE_SHORT = {1: 'الصيدلية', 2: 'الداخلي'};
+function lsGet(k){ try { const v = localStorage.getItem(k); return v == null ? null : JSON.parse(v); } catch (e) { return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+/* ---------- catalog index ---------- */
+const byId = new Map(), byBc = new Map(), byBcNorm = new Map();
+CATALOG.forEach(it => {
+  it._t = (it.n + ' ' + it.i + ' ' + it.bs.join(' ') + ' ' + (it.c || '')).toLowerCase();
+  it._n = it.n.toLowerCase();
+  byId.set(it.i, it);
+  it.bs.forEach(b => { if (!byBc.has(b)) byBc.set(b, it); const z = b.replace(/^0+/, ''); if (z && !byBcNorm.has(z)) byBcNorm.set(z, it); });
+});
+
+/* ---------- state ---------- */
+const DEFAULT_COLS = {
+  ar: [
+    {k:'i', on:true,  h:'رقم الصنف'}, {k:'b', on:true, h:'الباركود'}, {k:'n', on:true, h:'اسم الصنف'},
+    {k:'u', on:true,  h:'الوحدة'},    {k:'q', on:true, h:'الكمية الفعلية'}, {k:'x', on:true, h:'تاريخ الانتهاء'},
+    {k:'s', on:false, h:'المخزن'},    {k:'t', on:false, h:'ملاحظات'}, {k:'v', on:false, h:'Value'}, {k:'f', on:false, h:'QtyFree'}, {k:'w', on:false, h:'العدّاد'}
+  ],
+  code: [
+    {k:'i', on:true, h:'رمز الصنف'}, {k:'q', on:true, h:'الكمية'},
+    {k:'b', on:false, h:'الباركود'}, {k:'n', on:false, h:'اسم الصنف'}, {k:'u', on:false, h:'الوحدة'}, {k:'x', on:false, h:'تاريخ الانتهاء'},
+    {k:'s', on:false, h:'المخزن'}, {k:'t', on:false, h:'ملاحظات'}, {k:'v', on:false, h:'Value'}, {k:'f', on:false, h:'QtyFree'}, {k:'w', on:false, h:'العدّاد'}
+  ],
+  print: [
+    {k:'i', on:true, h:'رقم الصنف'}, {k:'n', on:true, h:'اسم الصنف'}, {k:'u', on:true, h:'الوحدة'},
+    {k:'x', on:true, h:'تاريخ الانتهاء'}, {k:'q', on:true, h:'كمية الجرد'},
+    {k:'b', on:false, h:'الباركود'}, {k:'s', on:false, h:'المخزن'}, {k:'t', on:false, h:'ملاحظات'}, {k:'v', on:false, h:'Value'}, {k:'f', on:false, h:'QtyFree'}, {k:'w', on:false, h:'العدّاد'}
+  ],
+  en: [
+    {k:'i', on:true, h:'ID'}, {k:'n', on:true, h:'Name'}, {k:'q', on:true, h:'Qty'}, {k:'u', on:true, h:'Unit'},
+    {k:'v', on:true, h:'Value'}, {k:'f', on:true, h:'QtyFree'}, {k:'x', on:true, h:'Expire'},
+    {k:'b', on:false, h:'Barcode'}, {k:'s', on:false, h:'Store'}, {k:'t', on:false, h:'Note'}, {k:'w', on:false, h:'Counter'}
+  ]
+};
+const S = {
+  store: lsGet('jard.store') === 2 ? 2 : 1,
+  entries: new Map(),
+  sel: null,          // {it} | {nw:true}
+  editing: null,
+  shown: 40,
+  deleting: new Set(),
+  armed: null,
+  tab: 'entry',
+  who: lsGet('jard.who') || '',
+  settings: lsGet('jard.settings') || {cols: DEFAULT_COLS.ar.map(c => ({...c})), fmt: 'dmy'}
+};
+if (!S.settings.cols || !S.settings.cols.length) S.settings.cols = DEFAULT_COLS.ar.map(c => ({...c}));
+if (!S.settings.cols.some(c => c.k === 'w')) S.settings.cols.push({k:'w', on:false, h:'العدّاد'});
+S.settings.cols = S.settings.cols.filter(c => c.k !== 'l');   // عمود الموقع أُلغي
+(lsGet('jard.entries') || []).forEach(e => { if (e && e.id) { delete e._s; S.entries.set(e.id, e); } });
+
+/* ---------- identity: each phone has its own id, so two phones are never mistaken for one person ---------- */
+const DV = (() => { let v = lsGet('jard.dv'); if (!v || typeof v !== 'string') { v = Math.random().toString(36).slice(2, 8); lsSet('jard.dv', v); } return v; })();
+const UID = window.__UID || null, ROLE = window.__ROLE || '', IS_COUNTER = ROLE === 'counter';
+const isMine = e => UID ? e.uid === UID : (!e.dv || e.dv === DV);   // with accounts: by user id; without: by device
+const canQty = e => !IS_COUNTER || isMine(e);                        // a counter sees colleagues' names and times, not their numbers
+const live = e => !e.vd;
+const RV = {map: new Map(), col: null, links: new Map(), gone: new Set()};   // review decisions, links, session status
+(lsGet('jard.rv') || []).forEach(d => { if (d && d.id) RV.map.set(d.id, d); });
+
+/* ---------- persistence: this device always, shared store when available ---------- */
+let col = null, dl = null, firstSnap = false, snapTimer = null, syncErr = false;
+const chains = new Map();
+const strip = e => { const o = {...e}; delete o._p; delete o._s; return o; };
+function saveLocal(){ lsSet('jard.entries', [...S.entries.values()]); }
+function queue(id, fn){
+  const prev = chains.get(id) || Promise.resolve();
+  const next = prev.then(fn, fn);
+  chains.set(id, next.catch(() => {}));
+  return next;
+}
+function pendingCount(){ let n = 0; S.entries.forEach(e => { if (e._p) n++; }); return n; }
+function setStatus(){
+  const el = $('#status'), tx = $('#statusText');
+  el.classList.remove('local', 'err');
+  if (!col) { el.classList.add('local'); tx.textContent = 'يُحفظ على هذا الجهاز'; return; }
+  if (syncErr) { el.classList.add('err'); tx.textContent = 'تعذّرت المزامنة، الحفظ على الجهاز'; return; }
+  const p = pendingCount();
+  if (!firstSnap) { el.classList.add('local'); tx.textContent = 'جارٍ الاتصال بالمزامنة…'; return; }
+  if (p) { el.classList.add('local'); tx.textContent = 'جارٍ الحفظ (' + p + ')…'; return; }
+  tx.textContent = 'محفوظ ومتزامن';
+}
+function persist(e){
+  e._p = true;               // not confirmed by the shared store yet
+  saveLocal();
+  if (!col) { setStatus(); return; }
+  e._s = true; setStatus();
+  const snapshot = strip(e), ts = e.ts;
+  queue(e.id, () => col.doc(e.id).set(snapshot).then(() => {
+    const cur = S.entries.get(e.id);
+    if (cur && cur.ts === ts) { delete cur._p; delete cur._s; saveLocal(); }
+    syncErr = false; setStatus();
+  }).catch(() => { const cur = S.entries.get(e.id); if (cur) delete cur._s; syncErr = true; setStatus(); }));
+}
+function persistDelete(id){
+  S.entries.delete(id); saveLocal();
+  if (!col) return;
+  S.deleting.add(id);
+  queue(id, () => col.doc(id).delete().then(() => { S.deleting.delete(id); }).catch(() => { syncErr = true; setStatus(); }));
+}
+const isDenied = err => /denied|permission|forbidden|not allowed|unauthor/i.test(String((err && (err.code || err.message)) || err || ''));
+function rvLocal(){ lsSet('jard.rv', [...RV.map.values()]); }
+function rvSend(d, old){
+  if (!RV.col) return;
+  const snap = strip(d), ts = d.ts;
+  queue('rv:' + d.id, () => RV.col.doc(d.id).set(snap).then(() => {
+    const c = RV.map.get(d.id); if (c && c.ts === ts) { delete c._p; rvLocal(); }
+  }).catch(err => {
+    const c = RV.map.get(d.id);
+    if (isDenied(err)) {
+      if (c && c.ts === ts) { if (old) RV.map.set(d.id, old); else RV.map.delete(d.id); rvLocal(); rebuildLinks(); }
+      toast('ليست لديك صلاحية القرار أو الاعتماد. هذا للمشرف.'); render();
+    } else { syncErr = true; setStatus(); }
+  }));
+}
+function rvSave(d){
+  const old = RV.map.get(d.id);
+  d.ts = Date.now(); d._p = true;
+  RV.map.set(d.id, d); rvLocal(); rebuildLinks(); rvSend(d, old); render();
+}
+function rvRemove(id){
+  const old = RV.map.get(id);
+  RV.map.delete(id); rvLocal(); rebuildLinks(); render();
+  if (!RV.col) return;
+  RV.gone.add(id);
+  queue('rv:' + id, () => RV.col.doc(id).delete().then(() => { RV.gone.delete(id); }).catch(err => {
+    RV.gone.delete(id);
+    if (isDenied(err)) { if (old) { RV.map.set(id, old); rvLocal(); rebuildLinks(); } toast('ليست لديك صلاحية التراجع عن القرار.'); render(); }
+    else { syncErr = true; setStatus(); }
+  }));
+}
+async function connect(){
+  try {
+    if (!window.__jardStore || !window.__jardStore.use) return;
+    const [d, g] = await Promise.all([window.__jardStore.use('db').catch(() => null), window.__jardStore.use('downloads').catch(() => null)]);
+    dl = g || null;
+    if (!d) { render(); return; }
+    col = d.collection('count');
+    RV.col = d.collection('review');
+    RV.col.onSnapshot(snap => {
+      const definitive = !snap.metadata.fromCache;
+      const m = new Map(), resend = [];
+      snap.docs.forEach(doc => { const v = doc.data(); if (v && !RV.gone.has(doc.id)) m.set(doc.id, {...v, id: doc.id}); });
+      RV.map.forEach((dd, id) => {
+        if (RV.gone.has(id)) return;
+        const r = m.get(id);
+        if (!r) { if (dd._p) { m.set(id, dd); if (definitive) resend.push(dd); } else if (!definitive) m.set(id, dd); }
+        else if (dd._p && (dd.ts || 0) > (r.ts || 0)) { m.set(id, dd); resend.push(dd); }
+      });
+      RV.map = m; rvLocal(); rebuildLinks(); resend.forEach(x => rvSend(x, null)); render();
+      if (S.sel) refreshDraftInfo();
+    }, () => {});
+    setStatus();
+    snapTimer = setTimeout(() => { if (!firstSnap) { syncErr = true; setStatus(); } }, 10000);
+    col.onSnapshot(snap => {
+      const definitive = !snap.metadata.fromCache;
+      const m = new Map();
+      snap.docs.forEach(doc => { const v = doc.data(); if (v && !S.deleting.has(doc.id)) m.set(doc.id, {...v, id: doc.id}); });
+      // Keep what this device counted until the shared store confirms it; honour deletions made on other devices.
+      const toSend = [];
+      S.entries.forEach((e, id) => {
+        if (S.deleting.has(id)) return;
+        const d = m.get(id);
+        if (!d) {
+          if (e._p) { m.set(id, e); if (definitive && !e._s) toSend.push(e); }   // never reached the store: keep and send
+          else if (!definitive) m.set(id, e);                                      // unconfirmed snapshot: do not judge
+          /* else: confirmed earlier, now gone from a confirmed snapshot = deleted elsewhere */
+        } else if ((e.ts || 0) > (d.ts || 0)) { m.set(id, e); if (!e._s) toSend.push(e); }
+      });
+      S.entries = m;
+      if (definitive) { firstSnap = true; syncErr = false; clearTimeout(snapTimer); }
+      saveLocal();
+      toSend.forEach(e => persist(e));
+      setStatus(); render();
+      if (S.sel) refreshDraftInfo();
+    }, () => { syncErr = true; setStatus(); });
+  } catch (e) { /* keep working on this device */ }
+}
+
+/* ---------- parsing ---------- */
+function normExp(raw){
+  const s = latin(raw).trim();
+  if (!s) return '';
+  let m, mo, y;
+  if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/))) { mo = +m[2]; y = +m[3]; }
+  else if ((m = s.match(/^(\d{1,2})[\/\-.](\d{2,4})$/))) { mo = +m[1]; y = +m[2]; }
+  else if ((m = s.match(/^(\d{4})[\/\-.](\d{1,2})$/))) { y = +m[1]; mo = +m[2]; }
+  else if ((m = s.match(/^(\d{2})(\d{4})$/))) { mo = +m[1]; y = +m[2]; }
+  else if ((m = s.match(/^(\d{2})(\d{2})$/))) { mo = +m[1]; y = +m[2]; }
+  else return false;
+  if (y < 100) y += 2000;
+  if (mo < 1 || mo > 12 || y < 2000 || y > 2099) return false;
+  return pad2(mo) + '/' + y;
+}
+function parseQty(raw){
+  const s = latin(raw).trim().replace(',', '.');
+  if (s === '' || !/^\d+(\.\d+)?$/.test(s)) return null;
+  const n = Number(s);
+  return isFinite(n) ? n : null;
+}
+function expState(ex){
+  if (!ex) return '';
+  const [m, y] = ex.split('/').map(Number);
+  const now = new Date(), cm = now.getFullYear() * 12 + now.getMonth() + 1, em = y * 12 + m;
+  if (em < cm) return 'exp';
+  if (em <= cm + 5) return 'soon';
+  return '';
+}
+function fmtExp(ex, fmt){
+  if (!ex) return '';
+  return fmt === 'dmy' ? '01/' + ex : ex;
+}
+
+/* ---------- search ---------- */
+function search(q){
+  q = latin(q).trim().toLowerCase();
+  if (!q) return [];
+  const toks = q.split(/\s+/), res = [];
+  for (const it of CATALOG) {
+    let ok = true;
+    for (const t of toks) if (!it._t.includes(t)) { ok = false; break; }
+    if (ok) {
+      let sc = 0;
+      if (it.n.toLowerCase().startsWith(q)) sc -= 2;
+      if (it.s & S.store) sc -= 1;
+      res.push([sc, it]);
+    }
+  }
+  res.sort((a, b) => a[0] - b[0] || a[1].n.localeCompare(b[1].n));
+  return res.slice(0, 15).map(x => x[1]);
+}
+function lookup(raw){
+  let it = byBc.get(raw) || byId.get(raw) || byId.get(raw.toUpperCase()) || byBcNorm.get(raw.replace(/^0+/, '')) || null;
+  if (!it) { const g = /^01(\d{14})/.exec(raw); if (g) it = byBc.get(g[1]) || byBcNorm.get(g[1].replace(/^0+/, '')) || null; }   // باركود GS1 مطبوع على العبوة
+  return it;
+}
+/* أصناف أضافها المستخدمون (من أي جهاز) وتُحفظ ضمن الجرد: تُستعمل للتعرف على الباركود لاحقاً */
+function lookupAdded(raw){
+  const z = raw.replace(/^0+/, '');
+  let best = null;
+  for (const e of S.entries.values()) if (!e.vd && e.nw && e.bc && (e.bc === raw || e.bc.replace(/^0+/, '') === z) && (!best || e.ts > best.ts)) best = e;
+  return best;
+}
+function lookupNid(nid){
+  let best = null;
+  S.entries.forEach(e => { if (e.nw && e.nid === nid && (!best || (e.ts || 0) > (best.ts || 0))) best = e; });
+  return best;
+}
+function newNid(){
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let id;
+  do { id = 'N-' + Array.from({length: 5}, () => A[Math.floor(Math.random() * A.length)]).join(''); } while (lookupNid(id));
+  return id;
+}
+/* ---------- similarity: name + strength + form + company, to stop duplicate items ---------- */
+const FORMMAP = {tab:'tab',tabs:'tab',tablet:'tab',tablets:'tab',cap:'cap',caps:'cap',capsule:'cap',capsules:'cap',syrup:'syr',syp:'syr',susp:'syr',suspension:'syr',drop:'drop',drops:'drop',amp:'amp',ampoule:'amp',inj:'amp',injection:'amp',vial:'vial',cream:'cream',oint:'cream',ointment:'cream',gel:'gel',supp:'sup',sup:'sup',suppository:'sup',lotion:'lot',spray:'spray',sachet:'sach',eff:'eff',effervescent:'eff',inhaler:'inh',solution:'sol',sol:'sol'};
+const UNITW = new Set(['mg','ml','g','gm','mcg','iu','x','mm','cm','l','kg','mgm']);
+const nname = x => latin(x).toLowerCase().replace(/\s+/g, ' ').trim();
+function profile(name){
+  const t = latin(name).toLowerCase();
+  const nums = (t.match(/\d+(?:\.\d+)?/g) || []).map(Number).sort((a, b) => a - b);
+  const words = t.match(/[a-z؀-ۿ]+/g) || [];
+  const forms = [...new Set(words.filter(w => FORMMAP[w]).map(w => FORMMAP[w]))].sort();
+  const core = [...new Set(words.filter(w => w.length > 1 && !FORMMAP[w] && !UNITW.has(w)))];
+  return {nums, forms, core};
+}
+const sameArr = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+function sameCo(a, b){
+  a = nname(a); b = nname(b);
+  if (!a || !b) return null;                       // unknown: neither a match nor a mismatch
+  if (a.includes(b) || b.includes(a)) return true;
+  const wa = a.split(/[\s\/\-,]+/).filter(w => w.length > 2), wb = b.split(/[\s\/\-,]+/).filter(w => w.length > 2);
+  return wa.some(w => wb.includes(w));
+}
+function similarCatalog(name, bc, co){
+  const out = [];
+  bc = (bc || '').trim();
+  if (bc) { const it = lookup(bc); if (it) out.push({it, strong: true, nums: true, forms: true, hit: 1, total: 1, rev: 1, co: sameCo(co, it.c)}); }
+  const p = profile(name);
+  if (!p.core.length) return out;
+  const need = Math.max(1, Math.ceil(p.core.length * 0.6)), cand = [];
+  for (const it of CATALOG) {
+    let hit = 0;
+    for (const w of p.core) if (it._n.includes(w)) hit++;
+    if (hit >= need) cand.push([hit, it]);
+  }
+  cand.sort((a, b) => b[0] - a[0]);
+  for (const [hit, it] of cand.slice(0, 8)) {
+    if (out.some(o => o.it === it)) continue;
+    const q = it._p || (it._p = profile(it.n));
+    out.push({it, hit, total: p.core.length, rev: q.core.length ? q.core.filter(w => p.core.includes(w)).length / q.core.length : 0,
+      nums: sameArr(p.nums, q.nums), forms: sameArr(p.forms, q.forms) || !p.forms.length || !q.forms.length, co: sameCo(co, it.c)});
+  }
+  return out.slice(0, 6);
+}
+function similarAdded(name, bc, exceptKey){
+  const key = nname(name), p = profile(name), res = [], seen = new Set();
+  S.entries.forEach(e => {
+    if (!e.nw || e.vd) return;
+    const k = nkeyOf(e); if (seen.has(k) || k === exceptKey) return; seen.add(k);
+    const q = profile(e.n || '');
+    const same = (bc && e.bc === bc) || nname(e.n) === key ||
+      (p.core.length && q.core.length && p.core.every(w => q.core.includes(w)) && q.core.every(w => p.core.includes(w)) && sameArr(p.nums, q.nums) && sameArr(p.forms, q.forms));
+    if (same) res.push(e);
+  });
+  return res;
+}
+
+/* ---------- entry form ---------- */
+function entryKey(e){ return [e.st, e.nw ? 'N' : e.iid, e.nw ? (e.nid || (e.bc || '') + '|' + (e.n || '').toLowerCase()) : '', e.ex || ''].join('#'); }
+function currentDraft(){
+  const ex = normExp($('#exp').value);
+  const sel = S.sel;
+  if (!sel) return null;
+  if (sel.nw) return {st: S.store, nw: true, iid: '', nid: sel.nid || '', bc: latin($('#nBc').value).trim(), n: $('#nName').value.trim(), u: $('#nUnit').value.trim(), co: $('#nCo').value.trim(), ex};
+  return {st: S.store, nw: false, iid: sel.it.i, bc: sel.it.b || '', n: sel.it.n, u: sel.it.u, co: sel.it.c || '', ex};
+}
+function findExisting(d){          // only MY earlier record: a colleague's count is never overwritten or added to
+  if (!d || d.ex === false) return null;
+  const k = entryKey(d);
+  for (const e of S.entries.values()) if (!e.vd && e.id !== S.editing && isMine(e) && entryKey(e) === k) return e;
+  return null;
+}
+function othersFor(d){             // colleagues' records for the same item and expiry
+  if (!d || d.ex === false) return [];
+  const k = entryKey(d), out = [];
+  S.entries.forEach(e => { if (!e.vd && e.id !== S.editing && !isMine(e) && entryKey(e) === k) out.push(e); });
+  return out.sort((a, b) => (a.ct || a.ts || 0) - (b.ct || b.ts || 0));
+}
+function showForm(){
+  const sel = S.sel, has = !!sel;
+  $('#formCard').hidden = !has;
+  $('#idle').hidden = has;
+  $('#newBtnRow').hidden = has;
+  if (!has) return;
+  const nw = !!sel.nw;
+  $('#newFields').hidden = !nw;
+  if (nw) {
+    $('#selHead').innerHTML = '<div class="sel-name" style="direction:rtl">صنف جديد غير موجود في قاعدة الأصناف</div><div class="meta">يُحفظ في ورقة «أصناف جديدة»، وسيتعرّف عليه التطبيق بالباركود في المرات القادمة وعلى كل الأجهزة.</div>' + (sel.nid ? '<div class="meta">المعرّف الداخلي: <b class="ltr">' + esc(sel.nid) + '</b> (يمكن كتابته أو مسحه في خانة البحث)</div>' : '<div class="meta">سيُعطى معرّفاً داخلياً فريداً عند الحفظ.</div>');
+    newHint();
+    $('#chipsBox').innerHTML = '';
+    $('#qtyLabel').textContent = 'الكمية';
+  } else {
+    const it = sel.it;
+    const other = !it.s ? '<span class="pill new">من قاعدة الأصناف · خارج قوائم الجرد</span>' : !(it.s & S.store) ? '<span class="pill new">من قائمة المخزن الآخر</span>' : '';
+    $('#selHead').innerHTML = '<div class="sel-name">' + esc(it.n) + '</div><div class="meta">' + other + 'رقم ' + esc(it.i) + (it.b ? ' · باركود ' + esc(it.b) : ' · بلا باركود') + (it.c ? ' · ' + esc(it.c) : '') + '</div>';
+    $('#qtyLabel').textContent = 'الكمية بالـ' + esc(it.u || 'وحدة');
+    renderChips();
+  }
+  refreshDraftInfo();
+}
+function renderChips(){
+  const sel = S.sel;
+  if (!sel || sel.nw) { $('#chipsBox').innerHTML = ''; return; }
+  const cur = normExp($('#exp').value);
+  const done = new Set();
+  S.entries.forEach(e => { if (!e.vd && !e.nw && e.st === S.store && e.iid === sel.it.i && e.id !== S.editing) done.add(e.ex || ''); });
+  if (!sel.it.e.length) { $('#chipsBox').innerHTML = '<div class="chips-label">لا توجد تواريخ انتهاء مسجلة لهذا الصنف في النظام.</div>'; return; }
+  $('#chipsBox').innerHTML = '<div class="chips-label">تواريخ الانتهاء المسجلة في النظام (اضغط لاختيار):</div><div class="chips">' +
+    sel.it.e.map(x => '<button type="button" class="chip' + (done.has(x) ? ' done' : '') + '" data-ex="' + esc(x) + '" aria-pressed="' + (cur === x) + '">' + esc(x) + '</button>').join('') + '</div>';
+}
+function renderPrev(){
+  const box = $('#prevInfo'), sel = S.sel;
+  if (!sel || sel.nw) { box.innerHTML = ''; return; }
+  const prev = [...S.entries.values()].filter(e => !e.vd && !e.nw && e.st === S.store && e.iid === sel.it.i && e.id !== S.editing).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  box.innerHTML = prev.length ? '<div class="note good">جُرد سابقاً في هذا المخزن:<br>' + prev.map(e => '• ' + (canQty(e) ? e.q + ' ' + esc(e.u || '') : 'عدّ مسجَّل') + (e.ex ? ' · ' + e.ex : ' · بلا تاريخ') + ' · ' + (isMine(e) ? 'أنت' : '<b>' + esc(e.by || '؟') + '</b>') + ' · ' + esc(fmtTime(e.ct || e.ts))).join('<br>') + '</div>' : '';
+}
+function refreshDraftInfo(){
+  renderPrev();
+  const raw = $('#exp').value, ex = normExp(raw), d = currentDraft();
+  const hint = $('#expHint');
+  if (ex === false) hint.innerHTML = '<span style="color:var(--bad)">تاريخ غير صحيح. اكتب مثل 0327 أو 03/2027.</span>';
+  else if (ex) { const st = expState(ex); hint.innerHTML = 'سيُحفظ: <b class="ltr">' + ex + '</b>' + (st === 'exp' ? ' <span class="pill exp">منتهي</span>' : st === 'soon' ? ' <span class="pill soon">ينتهي خلال 6 أشهر</span>' : ''); }
+  else hint.textContent = 'اكتب الشهر والسنة، مثل 0327 أو 03/2027. اتركه فارغاً إن لم يوجد تاريخ.';
+  const box = $('#dupBox'), ex2 = findExisting(d);
+  if (ex2 && !S.editing) {
+    box.hidden = false;
+    const keep = (box.querySelector('input:checked') || {}).value || 'add';
+    box.innerHTML = '<div class="note warn">لديك عدّ سابق بنفس التاريخ: <b>' + ex2.q + '</b></div><div class="radios"><label><input type="radio" name="dup" value="add"' + (keep === 'add' ? ' checked' : '') + '> أضف إلى كميتي السابقة</label><label><input type="radio" name="dup" value="rep"' + (keep === 'rep' ? ' checked' : '') + '> استبدل كميتي</label></div>';
+  } else { box.hidden = true; box.innerHTML = ''; }
+  const oth = d && !S.editing ? othersFor(d) : [];
+  let ob = oth.length ? '<div class="note warn">جرده زميلك بنفس التاريخ: ' + oth.map(e => '<b>' + esc(e.by || '؟') + '</b> ' + (canQty(e) ? e.q + ' ' : '') + '(' + esc(fmtTime(e.ct || e.ts)) + ')').join('، ') + '.<br>عدّك سيُسجَّل <b>منفصلاً</b> ولن يُجمع مع عدّه. إن اختلف الرقمان يظهر الصنف في «مراجعة».</div>' : '';
+  if (d && d.ex !== false) {
+    const dec = RV.map.get(decId(groupKey({st: d.st, nw: d.nw, nid: d.nid, iid: d.iid, bc: d.bc, n: d.n, ex: d.ex || ''})));
+    if (dec && dec.mode === 'recount') ob += '<div class="note bad">طلب المشرف إعادة عدّ هذا الصنف بهذا التاريخ.</div>';
+  }
+  $('#othBox').innerHTML = ob;
+  renderChips();
+}
+function pick(it){
+  S.sel = {it}; S.editing = null;
+  $('#scan').value = ''; $('#sug').hidden = true;
+  $('#qty').value = ''; $('#exp').value = '';
+  $('#saveBtn').textContent = 'حفظ';
+  $('#formMsg').innerHTML = '';
+  showForm();
+  $('#qty').focus();
+}
+function openNew(bc, pre){
+  pre = pre || {};
+  S.sel = {nw: true, nid: pre.nid || ''}; S.editing = null; S.nConfirm = false;
+  $('#scan').value = ''; $('#sug').hidden = true;
+  $('#nName').value = pre.n || ''; $('#nBc').value = bc || ''; $('#nUnit').value = pre.u || ''; $('#nCo').value = pre.co || '';
+  $('#qty').value = ''; $('#exp').value = '';
+  $('#saveBtn').textContent = 'حفظ';
+  $('#formMsg').innerHTML = '';
+  showForm();
+  (pre.n ? $('#qty') : $('#nName')).focus();
+}
+function chipsFor(c){
+  return '<span class="pill' + (c.nums ? '' : ' exp') + '">' + (c.nums ? 'نفس التركيز/الحجم' : 'التركيز أو الحجم مختلف') + '</span>' +
+    '<span class="pill' + (c.forms ? '' : ' exp') + '">' + (c.forms ? 'نفس الشكل' : 'شكل مختلف') + '</span>' +
+    (c.co === true ? '<span class="pill">نفس الشركة</span>' : c.co === false ? '<span class="pill exp">شركة مختلفة</span>' : '');
+}
+function similarNow(){
+  const sel = S.sel; if (!sel || !sel.nw) return {cat: [], add: []};
+  const bc = latin($('#nBc').value).trim(), nm = $('#nName').value.trim(), co = $('#nCo').value.trim();
+  const mine = S.editing && S.entries.get(S.editing);
+  const cat = (bc.length >= 6 || nm.length >= 3) ? similarCatalog(nm, bc, co) : [];
+  const add = (bc.length >= 6 || nm.length >= 3) ? similarAdded(nm, bc, mine ? nkeyOf(mine) : (sel.nid || null)).filter(e => !sel.nid || e.nid !== sel.nid) : [];
+  return {cat, add};
+}
+function newHint(){
+  const box = $('#nHint'); if (!box) return;
+  const {cat, add} = similarNow();
+  let html = '';
+  if (add.length) html += '<div class="note warn" style="margin-top:8px">أصناف أضافها زملاؤك أو أنت وتشبه هذا الصنف، اختر أحدها بدل التكرار:</div><div class="sug" style="margin-top:6px">' +
+    add.slice(0, 4).map(e => '<button type="button" data-useadded="' + esc(nkeyOf(e)) + '"><span class="ltr" style="text-align:right">' + esc(e.n) + '</span><small>' + esc(e.nid || '') + ' · ' + esc(e.by || '؟') + '</small></button>').join('') + '</div>';
+  if (cat.length) html += '<div class="note warn" style="margin-top:8px">' + (cat[0].strong ? 'هذا الباركود موجود في القاعدة.' : 'أصناف مشابهة في قاعدة الأصناف. راجع الاسم والتركيز والشكل والشركة قبل الإضافة:') + '</div><div class="sug" style="margin-top:6px">' +
+    cat.map(c => '<div class="cand"><div class="nm">' + esc(c.it.n) + '</div><div class="meta">' + esc(c.it.c || '') + ' · رقم ' + esc(c.it.i) + '</div><div>' + chipsFor(c) + '</div><div><button type="button" class="btn small ghost" data-use="' + esc(c.it.i) + '">هذا هو الصنف</button></div></div>').join('') + '</div>';
+  if (cat.length || add.length) html += '<label class="confirm"><input type="checkbox" id="nConfirm"' + (S.nConfirm ? ' checked' : '') + '> أؤكد أنه صنف جديد مختلف عن الأصناف أعلاه</label>';
+  box.innerHTML = html;
+}
+function cancelForm(){
+  S.sel = null; S.editing = null;
+  $('#formMsg').innerHTML = '';
+  showForm();
+  $('#scan').focus();
+}
+function msg(el, cls, text){ el.innerHTML = '<div class="note ' + cls + '">' + esc(text) + '</div>'; }
+function sessionApproved(){ const x = RV.map.get('SESSION'); return !!(x && x.status === 'approved'); }
+function addLog(e, a, x){ e.log = (e.log || []).concat([Object.assign({t: Date.now(), by: S.who || '', a}, x || {})]).slice(-30); }
+function save(){
+  const sel = S.sel; if (!sel) return;
+  const out = $('#formMsg');
+  if (!S.who) { msg(out, 'bad', 'اكتب اسمك في الأعلى أولاً ليُسجَّل العدّ باسمك.'); $('#who').focus(); return; }
+  if (sessionApproved()) { msg(out, 'bad', 'الجرد معتمد ومُغلق. يطلب المشرف إعادة فتحه من تبويب «مراجعة».'); return; }
+  const q = parseQty($('#qty').value);
+  if (q == null) { msg(out, 'bad', 'اكتب الكمية بالأرقام (يمكن أن تكون 0).'); $('#qty').focus(); return; }
+  const ex = normExp($('#exp').value);
+  if (ex === false) { msg(out, 'bad', 'تاريخ الانتهاء غير صحيح.'); $('#exp').focus(); return; }
+  const d = currentDraft();
+  if (sel.nw && !d.n) { msg(out, 'bad', 'اكتب اسم الصنف الجديد.'); $('#nName').focus(); return; }
+  if (sel.nw && !S.editing) {
+    const sm = similarNow();
+    if ((sm.cat.length || sm.add.length) && !S.nConfirm) { msg(out, 'warn', 'يوجد صنف مشابه. اختر أحد الأصناف المقترحة، أو أكّد أنه صنف مختلف ثم احفظ.'); newHint(); return; }
+  }
+  const now = Date.now();
+  let e, label = 'تم الحفظ';
+  if (S.editing && S.entries.has(S.editing)) {
+    e = S.entries.get(S.editing);
+    if (!isMine(e)) { msg(out, 'bad', 'هذا عدّ زميلك ولا يمكن تعديله.'); return; }
+    const old = e.q;
+    e.q = q; e.ex = ex; e.ts = now; e.by = S.who || e.by || ''; if (!e.dv) e.dv = DV; if (!e.ct) e.ct = e.ts; if (UID) e.uid = UID;
+    if (e.nw) { e.n = d.n; e.bc = d.bc; e.u = d.u; e.co = d.co; }
+    addLog(e, 'edit', {p: old, q});
+    label = 'تم تعديل السطر';
+  } else {
+    const ex2 = findExisting(d);
+    const mode = (document.querySelector('input[name=dup]:checked') || {}).value || 'add';
+    if (ex2) {
+      const old = ex2.q;
+      e = ex2; e.q = mode === 'add' ? Math.round((old + q) * 1000) / 1000 : q; e.ts = now; e.by = S.who || e.by || ''; if (!e.dv) e.dv = DV; if (!e.ct) e.ct = e.ts; if (UID) e.uid = UID;
+      addLog(e, mode === 'add' ? 'addqty' : 'replace', {p: old, q: e.q});
+      label = mode === 'add' ? 'أُضيفت إلى كميتك، المجموع ' + e.q : 'استُبدلت كميتك';
+    } else {
+      e = {id: now.toString(36) + '-' + Math.random().toString(36).slice(2, 7), st: d.st, iid: d.iid, nid: d.nw ? (d.nid || newNid()) : '', bc: d.bc, n: d.n, u: d.u, co: d.co || '', q, ex, nw: d.nw, by: S.who, dv: DV, ct: now, ts: now, log: [{t: now, by: S.who, a: 'add', q}]};
+      if (UID) e.uid = UID;
+      if (!e.nw) delete e.nid;
+      S.entries.set(e.id, e);
+    }
+    const oth = othersFor(entryOf(e));
+    if (oth.length && oth.some(o => Math.abs(o.q - e.q) > 1e-9)) label = IS_COUNTER ? 'حُفظ عدّك، ويختلف عن عدّ زميلك. سيراجعه المشرف. أعد العدّ إن أمكن.' : 'حُفظ عدّك، ويختلف عن عدّ ' + (oth[0].by || 'زميلك') + ' (' + oth[0].q + '). سيظهر للمراجعة.';
+  }
+  persist(e);
+  toast(label);
+  S.sel = null; S.editing = null;
+  $('#formMsg').innerHTML = '';
+  showForm(); render();
+  $('#scan').focus();
+}
+const entryOf = e => ({st: e.st, nw: e.nw, nid: e.nid, iid: e.iid, bc: e.bc, n: e.n, ex: e.ex || ''});
+function editEntry(id){
+  const e = S.entries.get(id); if (!e) return;
+  if (!isMine(e)) { toast('هذا عدّ زميلك ولا يمكن تعديله'); return; }
+  if (e.vd) { toast('هذا السطر مستبعد. استعده أولاً'); return; }
+  S.store = e.st; lsSet('jard.store', S.store);
+  S.sel = e.nw ? {nw: true, nid: e.nid || ''} : {it: byId.get(e.iid) || {i: e.iid, b: e.bc, n: e.n, u: e.u, s: 3, e: []}};
+  S.editing = id; S.nConfirm = true;
+  setTab('entry');
+  showForm();
+  if (e.nw) { $('#nName').value = e.n || ''; $('#nBc').value = e.bc || ''; $('#nUnit').value = e.u || ''; $('#nCo').value = e.co || ''; newHint(); }
+  $('#qty').value = String(e.q); $('#exp').value = e.ex || '';
+  $('#saveBtn').textContent = 'حفظ التعديل';
+  refreshDraftInfo(); renderChips();
+  $('#qty').focus(); $('#qty').select();
+  renderHeader();
+}
+function removeEntry(id){            // never deletes: the record is set aside and can be restored
+  if (S.armed !== id) {
+    S.armed = id; render();
+    setTimeout(() => { if (S.armed === id) { S.armed = null; render(); } }, 3500);
+    return;
+  }
+  S.armed = null;
+  const e = S.entries.get(id); if (!e) return;
+  if (!isMine(e)) { toast('هذا عدّ زميلك ولا يمكن استبعاده'); render(); return; }
+  if (sessionApproved()) { toast('الجرد معتمد ومُغلق'); render(); return; }
+  e.vd = true; e.vb = S.who || ''; e.vt = Date.now(); e.ts = e.vt;
+  addLog(e, 'void', {q: e.q});
+  persist(e);
+  toast('تم الاستبعاد. يمكنك التراجع من «المجرود ← إظهار ما استُبعد»');
+  render();
+}
+function restoreEntry(id){
+  const e = S.entries.get(id); if (!e || !isMine(e)) return;
+  if (sessionApproved()) { toast('الجرد معتمد ومُغلق'); return; }
+  delete e.vd; delete e.vb; delete e.vt; e.ts = Date.now();
+  addLog(e, 'restore', {q: e.q});
+  persist(e);
+  toast('تمت الاستعادة');
+  render();
+}
+
+/* ---------- rendering ---------- */
+function toast(t){
+  const el = $('#toast'); el.textContent = t; el.classList.add('on');
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 2200);
+}
+function fmtTime(ts){
+  if (!ts) return '';
+  const d = new Date(ts), n = new Date(), t = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  return d.toDateString() === n.toDateString() ? t : pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1) + ' ' + t;
+}
+const dtFull = ts => { if (!ts) return ''; const d = new Date(ts); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); };
+const ACT = {add: 'أُضيف', edit: 'عُدِّل', addqty: 'أُضيفت كمية', replace: 'استُبدلت الكمية', void: 'استُبعد', restore: 'استُعيد'};
+function logHtml(e){
+  if (!e.log || e.log.length < 2) return '';
+  return '<details style="grid-column:1/-1"><summary class="muted" style="font-size:13px;font-weight:500;min-height:30px">سجل هذا العدّ (' + e.log.length + ')</summary><div class="meta">' +
+    e.log.map(l => esc(fmtTime(l.t)) + ' · ' + esc(l.by || '؟') + ' · ' + (ACT[l.a] || esc(l.a)) + (l.q != null ? ' · ' + l.q : '') + (l.p != null && l.p !== l.q ? ' (كان ' + l.p + ')' : '')).join('<br>') + '</div></details>';
+}
+function entryRow(e, withOps){
+  const st = expState(e.ex), mine = isMine(e);
+  const badges = (e.vd ? '<span class="pill exp">مستبعد</span>' : '') + (e.nw ? '<span class="pill new">جديد' + (e.nid ? ' ' + esc(e.nid) : '') + '</span>' : '') +
+    (e.ex ? '<span class="pill' + (st ? ' ' + st : '') + '">' + e.ex + (st === 'exp' ? ' · منتهي' : '') + '</span>' : '<span class="pill">بلا تاريخ</span>') +
+    '<span class="pill">' + STORE_SHORT[e.st] + '</span><span class="pill">' + esc(e.by || '؟') + (mine && e.dv ? ' (أنت)' : '') + ' · ' + esc(fmtTime(e.ct || e.ts)) + '</span>';
+  const co = e.nw ? e.co : (byId.get(e.iid) || {}).c;
+  const meta = (e.nw ? '' : 'رقم ' + esc(e.iid) + ' · ') + (e.bc ? 'باركود ' + esc(e.bc) : 'بلا باركود') + (co ? ' · ' + esc(co) : '');
+  const armed = S.armed === e.id;
+  let ops = '';
+  if (withOps) {
+    if (!mine) ops = '<div class="ops"><span class="muted" style="font-size:13px">عدّ زميل: لا يُعدَّل من هنا</span></div>';
+    else if (e.vd) ops = '<div class="ops"><button type="button" class="btn ghost small" data-restore="' + e.id + '">استعادة</button></div>';
+    else ops = '<div class="ops"><button type="button" class="btn ghost small" data-edit="' + e.id + '">تعديل</button><button type="button" class="btn danger small' + (armed ? ' arm' : '') + '" data-del="' + e.id + '">' + (armed ? 'اضغط للتأكيد' : 'استبعاد') + '</button></div>';
+  }
+  return '<div class="item"' + (e.vd ? ' style="opacity:.6"' : '') + '><div><div class="nm">' + esc(e.n) + '</div><div class="meta">' + meta + '</div><div style="margin-top:4px">' + badges + '</div></div>' +
+    '<div class="qty">' + (canQty(e) ? e.q : '•') + '<small>' + esc(e.u || '') + '</small></div>' + ops + (withOps ? logHtml(e) : '') + '</div>';
+}
+function storeEntries(st, all){ return [...S.entries.values()].filter(e => (st === 0 || e.st === st) && (all || !e.vd)); }
+function counts(){
+  const cur = storeEntries(S.store);
+  const counted = new Set(cur.filter(e => !e.nw).map(e => e.iid));
+  let left = 0; CATALOG.forEach(it => { if ((it.s & S.store) && !counted.has(it.i)) left++; });
+  return {lines: cur.length, items: counted.size + new Set(cur.filter(e => e.nw).map(e => (e.bc || '') + '|' + e.n)).size, left};
+}
+function renderHeader(){
+  $('#st1').setAttribute('aria-pressed', S.store === 1);
+  $('#st2').setAttribute('aria-pressed', S.store === 2);
+  const c = counts();
+  $('#tLines').textContent = c.lines; $('#tItems').textContent = c.items; $('#tLeft').textContent = c.left;
+}
+function render(){
+  renderHeader();
+  const cur = storeEntries(S.store).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  $('#recent').innerHTML = cur.length ? cur.slice(0, 5).map(e => entryRow(e, true)).join('') : '<div class="idle">لا توجد أصناف مجرودة في هذا المخزن بعد.</div>';
+  const q = latin($('#listQ').value).trim().toLowerCase();
+  let list = S.showVoid ? storeEntries(S.store, true).sort((a, b) => (b.ts || 0) - (a.ts || 0)) : cur;
+  if (q) { const toks = q.split(/\s+/); list = list.filter(e => { const t = (e.n + ' ' + e.iid + ' ' + e.bc + ' ' + (e.nid || '')).toLowerCase(); return toks.every(k => t.includes(k)); }); }
+  $('#list').innerHTML = list.length ? list.slice(0, S.shown).map(e => entryRow(e, true)).join('') : '<div class="idle">لا توجد نتائج.</div>';
+  $('#moreBtn').hidden = list.length <= S.shown;
+  const ap = sessionApproved(), ses = RV.map.get('SESSION');
+  $('#apBanner').hidden = !ap;
+  if (ap) $('#apBanner').textContent = 'الجرد معتمد ومُغلق (اعتمده ' + (ses.by || '؟') + ' · ' + fmtTime(ses.ts) + '). لا يمكن إضافة عدّ جديد حتى يُعاد فتحه.';
+  const pend = IS_COUNTER ? 0 : computeGroups().filter(g => PEND.has(g.state)).length;
+  $('#rvBadge').hidden = !pend; $('#rvBadge').textContent = pend;
+  if (S.tab === 'review') renderReviewKeep();
+  if (!IS_COUNTER) renderExportInfo();
+  renderDbInfo();
+}
+function setTab(t){
+  if (IS_COUNTER && (t === 'review' || t === 'export')) t = 'entry';
+  S.tab = t;
+  [['entry', 'pEntry', 'tabEntry'], ['list', 'pList', 'tabList'], ['review', 'pReview', 'tabReview'], ['export', 'pExport', 'tabExport']].forEach(([k, p, b]) => {
+    $('#' + p).hidden = k !== t; $('#' + b).setAttribute('aria-selected', k === t);
+  });
+  render();
+}
+function setStore(n){
+  S.store = n; lsSet('jard.store', n);
+  S.sel = null; S.editing = null; S.shown = 40;
+  showForm(); render();
+}
+
+/* ---------- review: groups, decisions, links ---------- */
+function hashStr(x){ let h = 5381; for (let i = 0; i < x.length; i++) h = ((h << 5) + h + x.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+const decId = k => 'D_' + hashStr(k) + '_' + k.length;
+const nkeyOf = e => e.nid || ('k:' + (e.bc || '') + '|' + (e.n || '').toLowerCase());
+function rebuildLinks(){ RV.links = new Map(); RV.map.forEach(d => { if (d.kind === 'link' && d.nk && d.iid) RV.links.set(d.nk, d.iid); }); }
+function itemKeyOf(e){ if (!e.nw) return 'I:' + e.iid; const lk = RV.links.get(nkeyOf(e)); return lk ? 'I:' + lk : 'N:' + nkeyOf(e); }
+const groupKey = e => e.st + '|' + itemKeyOf(e) + '|' + (e.ex || '');
+const PEND = new Set(['conflict', 'stale', 'recount']);
+function computeGroups(){
+  const gm = new Map();
+  S.entries.forEach(e => {
+    if (e.vd) return;
+    const k = groupKey(e); let g = gm.get(k);
+    if (!g) gm.set(k, g = {k, st: e.st, ex: e.ex || '', recs: []});
+    g.recs.push(e);
+  });
+  const out = [];
+  gm.forEach(g => {
+    g.recs.sort((a, b) => (a.ct || a.ts || 0) - (b.ct || b.ts || 0));
+    const r0 = g.recs[0], lk = r0.nw ? RV.links.get(nkeyOf(r0)) : null, cit = lk ? byId.get(lk) : null;
+    g.item = cit ? {n: cit.n, bc: cit.b, u: cit.u, co: cit.c, i: cit.i, linked: nkeyOf(r0)}
+      : r0.nw ? {nw: true, n: r0.n, bc: r0.bc, u: r0.u, co: r0.co, nid: r0.nid || '', i: r0.nid || ''}
+      : {n: r0.n, bc: r0.bc, u: r0.u, i: r0.iid, co: (byId.get(r0.iid) || {}).c};
+    g.sig = g.recs.map(r => r.id + ':' + r.q).sort().join(',');
+    const qs = g.recs.map(r => r.q), same = qs.every(q => Math.abs(q - qs[0]) < 1e-9);
+    const dec = RV.map.get(decId(g.k));
+    g.dec = dec && dec.k === g.k ? dec : null;
+    if (g.recs.length === 1) { g.state = 'single'; g.final = qs[0]; }
+    else if (g.dec && g.dec.sig === g.sig) { if (g.dec.mode === 'recount') { g.state = 'recount'; g.final = null; } else { g.state = 'resolved'; g.final = g.dec.q; } }
+    else if (g.dec) { g.state = 'stale'; g.final = null; }
+    else if (same) { g.state = 'match'; g.final = qs[0]; }
+    else { g.state = 'conflict'; g.final = null; }
+    out.push(g);
+  });
+  return out;
+}
+function finalLines(stores){
+  const out = [];
+  computeGroups().forEach(g => {
+    if (!stores.includes(g.st) || g.final == null) return;
+    out.push({st: g.st, iid: g.item.nw ? '' : g.item.i, nid: g.item.nid || '', bc: g.item.bc || '', n: g.item.n, u: g.item.u || '', co: g.item.co || '', q: g.final, ex: g.ex, nw: !!g.item.nw,
+      by: [...new Set(g.recs.map(r => r.by || '؟'))].join('، '), nt: '', state: g.state});
+  });
+  return out;
+}
+function decide(g, mode, o){
+  const old = RV.map.get(decId(g.k));
+  const d = {id: decId(g.k), kind: 'dec', k: g.k, mode, sig: g.sig, st: g.st, ex: g.ex, nm: g.item.n, by: S.who, q: null,
+    hist: ((old && old.hist) || []).concat(old ? [{t: old.ts, by: old.by, mode: old.mode, q: old.q}] : []).slice(-10)};
+  if (mode === 'pick') { const r = g.recs.find(x => x.id === o.pick); if (!r) return; d.q = r.q; d.pick = r.id; d.pickBy = r.by || ''; }
+  else if (mode === 'manual') d.q = o.q;
+  else if (mode === 'sum') { d.q = Math.round(g.recs.reduce((a, r) => a + r.q, 0) * 1000) / 1000; d.reason = o.reason; }
+  rvSave(d);
+}
+function decText(d){
+  const who = esc(d.by || '؟') + ' · ' + esc(fmtTime(d.ts));
+  if (d.mode === 'pick') return 'اعتُمد عدّ ' + esc(d.pickBy || '؟') + ': ' + d.q + ' — ' + who;
+  if (d.mode === 'manual') return 'اعتُمد رقم إعادة العدّ: ' + d.q + ' — ' + who;
+  if (d.mode === 'sum') return 'جُمعت الكميات: ' + d.q + ' (السبب: ' + esc(d.reason || '') + ') — ' + who;
+  return 'طُلبت إعادة العدّ — ' + who;
+}
+function itemLine(g){
+  const it = g.item;
+  return '<div class="nm">' + esc(it.n) + '</div><div class="meta">' + (it.nw ? '<span class="pill new">جديد ' + esc(it.i || '') + '</span>' : 'رقم ' + esc(it.i) + ' · ') + STORE_SHORT[g.st] + ' · ' + (g.ex ? esc(g.ex) : 'بلا تاريخ') + (it.co ? ' · ' + esc(it.co) : '') + '</div>';
+}
+function recRows(g, pickable){
+  return '<div class="rrows">' + g.recs.map(r => '<div class="rrow"><span>' + esc(r.by || '؟') + (isMine(r) && r.dv ? ' (أنت)' : '') + ' · ' + esc(fmtTime(r.ct || r.ts)) + '</span><b class="ltr">' + r.q + ' ' + esc(r.u || '') + '</b>' +
+    (pickable ? '<button type="button" class="btn small ghost" data-rv="pick" data-k="' + esc(g.k) + '" data-id="' + esc(r.id) + '">اعتمد هذا</button>' : '') + '</div>').join('') + '</div>';
+}
+function sumRow(g){ return '<div class="rvact"><input class="rr" type="text" placeholder="سبب الجمع: رفّان أو دفعتان مختلفتان"><button type="button" class="btn small ghost" data-rv="sum" data-k="' + esc(g.k) + '">اجمع الكميات</button></div>'; }
+function conflictCard(g){
+  const note = g.state === 'stale' ? '<div class="note warn" style="margin:0">تغيّرت العدّات بعد قرار سابق، راجعها من جديد.</div>' : g.state === 'recount' ? '<div class="note warn" style="margin:0">مطلوب إعادة عدّ. أدخل العدّ الجديد من شاشة الإدخال ثم اعتمد أحد الأرقام.</div>' : '';
+  return '<div class="rvcard" data-k="' + esc(g.k) + '">' + itemLine(g) + note + recRows(g, true) +
+    '<div class="rvact"><input class="rq ltr" type="text" inputmode="decimal" placeholder="الكمية بعد إعادة العدّ"><button type="button" class="btn small" data-rv="manual" data-k="' + esc(g.k) + '">اعتمد هذا الرقم</button></div>' + sumRow(g) +
+    (g.state === 'recount' ? '' : '<div class="rvact"><button type="button" class="btn small danger" data-rv="recount" data-k="' + esc(g.k) + '">طلب إعادة عدّ</button></div>') + '</div>';
+}
+function linkSuggestions(){
+  const seen = new Map(), out = [];
+  S.entries.forEach(e => {
+    if (e.vd || !e.nw) return;
+    const nk = nkeyOf(e);
+    if (RV.links.has(nk) || RV.map.has('NL_' + hashStr(nk))) return;
+    let o = seen.get(nk); if (!o) seen.set(nk, o = {nk, e, n: 0, by: new Set()});
+    o.n++; o.by.add(e.by || '؟');
+  });
+  seen.forEach(o => {
+    const c = similarCatalog(o.e.n, o.e.bc, o.e.co).filter(x => x.strong || (x.nums && x.forms && x.hit / x.total >= 0.75 && x.rev >= 0.75 && x.co !== false));
+    if (c.length) out.push({...o, cands: c.slice(0, 2)});
+  });
+  return out;
+}
+let RVG = [];
+function renderReview(){
+  const gs = computeGroups(); RVG = gs;
+  const pend = gs.filter(g => PEND.has(g.state)), matches = gs.filter(g => g.state === 'match'), done = gs.filter(g => g.state === 'resolved');
+  const recs = [...S.entries.values()].filter(live), names = new Map();
+  recs.forEach(e => { const n = e.by || '؟'; let o = names.get(n); if (!o) names.set(n, o = {c: 0, dv: new Set()}); o.c++; if (e.dv) o.dv.add(e.dv); });
+  const dup = [...names.entries()].filter(([, o]) => o.dv.size > 1).map(([n]) => n);
+  const ses = RV.map.get('SESSION'), ap = sessionApproved();
+  $('#rvSummary').innerHTML = '<div>' + recs.length + ' سجل عدّ فعّال من ' + names.size + ' موظف/جهاز: ' + [...names.entries()].map(([n, o]) => '<b>' + esc(n) + '</b> (' + o.c + ')').join('، ') + '</div>' +
+    '<div class="hint">تحتاج قراراً: <b>' + pend.length + '</b> · متطابقة: ' + matches.length + ' · محسومة: ' + done.length + '</div>' +
+    (dup.length ? '<div class="note warn">الاسم ' + dup.map(esc).join('، ') + ' مستخدم على أكثر من جهاز. استعمل اسماً مختلفاً لكل جهاز.</div>' : '');
+  $('#rvConf').innerHTML = pend.length ? pend.map(conflictCard).join('') : '<div class="idle">لا توجد أصناف تحتاج قراراً.</div>';
+  $('#rvMatch').innerHTML = matches.length ? matches.map(g => '<div class="rvcard" data-k="' + esc(g.k) + '">' + itemLine(g) + recRows(g, false) + sumRow(g) + '</div>').join('') : '<div class="idle">لا يوجد.</div>';
+  const links = linkSuggestions(), lk = [...RV.links.entries()];
+  $('#rvLinks').innerHTML = (links.length ? links.map(o => '<div class="rvcard"><div class="nm">' + esc(o.e.n) + '</div><div class="meta">صنف جديد ' + esc(o.e.nid || '') + ' · ' + o.n + ' سجل · ' + [...o.by].map(esc).join('، ') + '</div>' +
+      o.cands.map(c => '<div class="cand"><div class="nm">' + esc(c.it.n) + '</div><div class="meta">' + esc(c.it.c || '') + ' · رقم ' + esc(c.it.i) + '</div><div>' + chipsFor(c) + '</div><div><button type="button" class="btn small" data-rv="link" data-nk="' + esc(o.nk) + '" data-iid="' + esc(c.it.i) + '" data-nm="' + esc(c.it.n) + '">اربطه بهذا الصنف</button></div></div>').join('') +
+      '<div class="rvact"><button type="button" class="btn small ghost" data-rv="nolink" data-nk="' + esc(o.nk) + '">ليس نفس الصنف</button></div></div>').join('') : '<div class="idle">لا توجد اقتراحات.</div>') +
+    (lk.length ? '<details><summary>روابط معتمدة (' + lk.length + ')</summary>' + lk.map(([nk, iid]) => '<div class="rrow"><span>' + esc((byId.get(iid) || {}).n || iid) + '</span><button type="button" class="btn small ghost" data-rv="unlink" data-nk="' + esc(nk) + '">فكّ الربط</button></div>').join('') + '</details>' : '');
+  $('#rvDone').innerHTML = done.length ? '<details><summary>' + done.length + ' قرار</summary>' + done.map(g => '<div class="rvcard" data-k="' + esc(g.k) + '">' + itemLine(g) + '<div class="note good" style="margin:0">' + decText(g.dec) + '</div><div class="rvact"><button type="button" class="btn small ghost" data-rv="undo" data-k="' + esc(g.k) + '">تراجع عن القرار</button></div></div>').join('') + '</details>' : '<div class="idle">لا توجد قرارات.</div>';
+  $('#rvSession').innerHTML = ap ? '<div class="note good">الجرد معتمد من <b>' + esc(ses.by || '؟') + '</b> · ' + esc(dtFull(ses.ts)) + '</div>' : '<div class="note warn">الجرد مفتوح.</div>';
+  const why = [];
+  if (!S.who) why.push('اكتب اسمك في شاشة الإدخال');
+  if (pend.length) why.push('يوجد ' + pend.length + ' صنف يحتاج قراراً');
+  if (!S.backedUp && !$('#bkSkip').checked) why.push('نزّل نسخة احتياطية أولاً');
+  $('#apBtn').hidden = ap; $('#reopenBtn').hidden = !ap;
+  $('#apBtn').disabled = !!why.length;
+  $('#apWhy').textContent = ap ? '' : why.length ? 'لا يمكن الاعتماد بعد: ' + why.join(' · ') : 'جاهز للاعتماد.';
+}
+function renderReviewKeep(){          // keep what is being typed when a colleague's phone syncs
+  const root = $('#pReview'), keep = new Map(), ae = document.activeElement;
+  let focus = null;
+  root.querySelectorAll('.rvcard').forEach(c => {
+    const k = c.dataset.k, a = c.querySelector('.rq'), b = c.querySelector('.rr');
+    if (k && ((a && a.value) || (b && b.value))) keep.set(k, [a ? a.value : '', b ? b.value : '']);
+    if (ae && c.contains(ae) && ae.tagName === 'INPUT') focus = [k, ae.classList.contains('rq') ? 'rq' : 'rr', ae.selectionStart];
+  });
+  renderReview();
+  keep.forEach(([a, b], k) => root.querySelectorAll('.rvcard').forEach(c => { if (c.dataset.k === k) { const x = c.querySelector('.rq'), y = c.querySelector('.rr'); if (x) x.value = a; if (y) y.value = b; } }));
+  if (focus) root.querySelectorAll('.rvcard').forEach(c => { if (c.dataset.k === focus[0]) { const el = c.querySelector('.' + focus[1]); if (el) { el.focus(); try { el.setSelectionRange(focus[2], focus[2]); } catch (e) {} } } });
+}
+S.backedUp = false;
+function backupObj(){ return {app: 'jard', version: 2, at: new Date().toISOString(), by: S.who, device: DV, entries: [...S.entries.values()].map(strip), review: [...RV.map.values()].map(strip)}; }
+async function exportBackup(){
+  const ok = await saveFile('jard_backup_' + today() + '_' + pad2(new Date().getHours()) + pad2(new Date().getMinutes()) + '.json', new Blob([JSON.stringify(backupObj())], {type: 'application/json'}), '#rvMsg');
+  if (ok) { S.backedUp = true; renderReview(); }
+}
+function approveClick(){
+  const b = $('#apBtn');
+  if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'اضغط مرة أخرى للتأكيد'; setTimeout(() => { delete b.dataset.armed; b.textContent = 'اعتماد الجرد'; }, 3500); return; }
+  delete b.dataset.armed; b.textContent = 'اعتماد الجرد';
+  const old = RV.map.get('SESSION');
+  rvSave({id: 'SESSION', kind: 'session', status: 'approved', by: S.who, stats: {lines: finalLines([1, 2]).length, records: [...S.entries.values()].filter(live).length},
+    hist: ((old && old.hist) || []).concat(old ? [{t: old.ts, by: old.by, status: old.status}] : []).slice(-20)});
+  toast('تم اعتماد الجرد');
+}
+function reopenClick(){
+  const old = RV.map.get('SESSION'); if (!old) return;
+  if (!S.who) { toast('اكتب اسمك أولاً'); return; }
+  rvSave({id: 'SESSION', kind: 'session', status: 'open', by: S.who, hist: (old.hist || []).concat([{t: old.ts, by: old.by, status: old.status}]).slice(-20)});
+  toast('أُعيد فتح الجرد');
+}
+
+/* ---------- export ---------- */
+function scopeStores(){ return (document.querySelector('input[name=scope]:checked') || {}).value === 'all' ? [1, 2] : [S.store]; }
+function colValue(k, e){
+  switch (k) {
+    case 'i': return e.iid || '';
+    case 'b': return e.bc || '';
+    case 'n': return e.n || '';
+    case 'u': return e.u || '';
+    case 'q': return e.q;
+    case 'x': return fmtExp(e.ex, S.settings.fmt);
+    case 's': return STORE[e.st];
+    case 't': return e.nt || '';
+    case 'v': return '';
+    case 'f': return 0;
+    case 'w': return e.by || '';
+  }
+  return '';
+}
+function mainTable(st){
+  const cols = S.settings.cols.filter(c => c.on);
+  const list = finalLines([st]).filter(e => !e.nw).sort((a, b) => (a.n || '').localeCompare(b.n || '') || (a.ex || '').slice(3).localeCompare((b.ex || '').slice(3)) || (a.ex || '').localeCompare(b.ex || ''));
+  return {name: 'المجرود - ' + STORE_SHORT[st], rows: [cols.map(c => c.h)].concat(list.map(e => cols.map(c => colValue(c.k, e)))), widths: cols.map(c => c.k === 'n' ? 46 : c.k === 'q' || c.k === 'u' ? 14 : 18)};
+}
+function newTable(stores){
+  const list = finalLines(stores).filter(e => e.nw);
+  if (!list.length) return null;
+  return {name: 'أصناف جديدة', rows: [['المخزن', 'المعرّف الداخلي', 'اسم الصنف', 'الباركود', 'الشركة', 'الوحدة', 'الكمية', 'تاريخ الانتهاء', 'الموظفون']].concat(list.map(e => [STORE[e.st], e.nid || '', e.n, e.bc || '', e.co || '', e.u || '', e.q, fmtExp(e.ex, S.settings.fmt), e.by])), widths: [18, 16, 46, 18, 24, 12, 10, 16, 20]};
+}
+function reviewTable(stores){
+  const gs = computeGroups().filter(g => stores.includes(g.st) && PEND.has(g.state));
+  if (!gs.length) return null;
+  const rows = [['المخزن', 'رقم الصنف', 'اسم الصنف', 'تاريخ الانتهاء', 'الموظف', 'وقت الإدخال', 'الكمية', 'الحالة']];
+  gs.forEach(g => g.recs.forEach(r => rows.push([STORE[g.st], g.item.i || '', g.item.n, fmtExp(g.ex, S.settings.fmt), r.by || '', dtFull(r.ct || r.ts), r.q, g.state === 'recount' ? 'مطلوب إعادة عدّ' : 'عدّات مختلفة'])));
+  return {name: 'تحتاج مراجعة', rows, widths: [16, 14, 44, 14, 14, 18, 10, 18]};
+}
+function logTable(stores){
+  const list = [...S.entries.values()].filter(e => stores.includes(e.st)).sort((a, b) => (a.ct || a.ts || 0) - (b.ct || b.ts || 0));
+  if (!list.length) return null;
+  const rows = [['المخزن', 'رقم الصنف', 'الباركود', 'اسم الصنف', 'تاريخ الانتهاء', 'الكمية', 'الموظف', 'الجهاز', 'وقت الإدخال', 'آخر تعديل', 'الحالة', 'السجل']];
+  list.forEach(e => rows.push([STORE[e.st], e.nw ? (e.nid || 'جديد') : e.iid, e.bc || '', e.n, fmtExp(e.ex, S.settings.fmt), e.q, e.by || '', e.dv || '', dtFull(e.ct || e.ts), dtFull(e.ts), e.vd ? 'مستبعد' : 'فعّال',
+    (e.log || []).map(l => dtFull(l.t) + ' ' + (l.by || '؟') + ' ' + (ACT[l.a] || l.a) + (l.q != null ? ' ' + l.q : '')).join(' | ')]));
+  return {name: 'سجل العدّات', rows, widths: [16, 14, 18, 44, 14, 10, 14, 10, 18, 18, 10, 70]};
+}
+function leftTable(st){
+  const counted = new Set(computeGroups().filter(g => g.st === st && !g.item.nw).map(g => g.item.i));
+  const rows = [['رقم الصنف', 'الباركود', 'اسم الصنف', 'الوحدة', 'تواريخ الانتهاء في النظام']];
+  CATALOG.forEach(it => { if ((it.s & st) && !counted.has(it.i)) rows.push([it.i, it.b || '', it.n, it.u, it.e.join(' ، ')]); });
+  return {name: 'لم تُجرد بعد - ' + STORE_SHORT[st], rows, widths: [14, 18, 46, 12, 30]};
+}
+function renderExportInfo(){
+  const stores = scopeStores(), fl = finalLines(stores);
+  const n = fl.filter(e => !e.nw).length, nn = fl.filter(e => e.nw).length;
+  const pend = computeGroups().filter(g => stores.includes(g.st) && PEND.has(g.state)).length;
+  $('#expSummary').textContent = n + ' سطر في ورقة الاستيراد' + (nn ? ' ، و' + nn + ' صنف جديد في ورقة منفصلة' : '') + (pend ? ' ، و' + pend + ' صنف موقوف للمراجعة (لم يدخل ملف الاستيراد)' : '') + '.';
+  $('#xlsxBtn').disabled = !n && !nn && !pend; $('#csvBtn').disabled = !n; $('#copyBtn').disabled = !n;
+}
+/* minimal XLSX (zip, stored) so the page needs no library */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b){ let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function colName(i){ let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+function xesc(s){ return String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function sheetXml(t){
+  let x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView rightToLeft="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>';
+  x += t.widths.map((w, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>').join('') + '</cols><sheetData>';
+  t.rows.forEach((r, ri) => {
+    x += '<row r="' + (ri + 1) + '">';
+    r.forEach((v, ci) => {
+      if (v === null || v === undefined || v === '') return;
+      const ref = colName(ci) + (ri + 1);
+      if (typeof v === 'number' && isFinite(v)) x += '<c r="' + ref + '"><v>' + v + '</v></c>';
+      else x += '<c r="' + ref + '" t="inlineStr"' + (ri === 0 ? ' s="1"' : '') + '><is><t xml:space="preserve">' + xesc(v) + '</t></is></c>';
+    });
+    x += '</row>';
+  });
+  return x + '</sheetData></worksheet>';
+}
+function buildXlsx(tables){
+  const enc = new TextEncoder(), names = [];
+  const safe = tables.map(t => { let n = t.name.replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 31).trim() || 'Sheet'; let k = n, i = 2; while (names.includes(k)) k = n.slice(0, 28) + ' ' + i++; names.push(k); return k; });
+  const NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main', R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const files = [
+    ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + tables.map((t, i) => '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('') + '</Types>'],
+    ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="' + NS + '" xmlns:r="' + R + '"><sheets>' + safe.map((n, i) => '<sheet name="' + xesc(n) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>').join('') + '</sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + tables.map((t, i) => '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>').join('') + '<Relationship Id="rId' + (tables.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+    ['xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="' + NS + '"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0E6B5C"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>']
+  ].map(([n, c]) => ({name: n, data: enc.encode(c)}));
+  tables.forEach((t, i) => files.push({name: 'xl/worksheets/sheet' + (i + 1) + '.xml', data: enc.encode(sheetXml(t))}));
+  const parts = [], cds = []; let off = 0;
+  files.forEach(f => {
+    const nm = enc.encode(f.name), crc = crc32(f.data), len = f.data.length;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(10, 0, true); lh.setUint16(12, 0x21, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, len, true); lh.setUint32(22, len, true); lh.setUint16(26, nm.length, true);
+    parts.push(new Uint8Array(lh.buffer), nm, f.data);
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint16(8, 0x0800, true); cd.setUint16(14, 0x21, true);
+    cd.setUint32(16, crc, true); cd.setUint32(20, len, true); cd.setUint32(24, len, true); cd.setUint16(28, nm.length, true); cd.setUint32(42, off, true);
+    cds.push(new Uint8Array(cd.buffer), nm);
+    off += 30 + nm.length + len;
+  });
+  const cdSize = cds.reduce((a, b) => a + b.length, 0), end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, cdSize, true); end.setUint32(16, off, true);
+  return new Blob(parts.concat(cds, [new Uint8Array(end.buffer)]), {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function csvText(rows){ return '﻿' + rows.map(r => r.map(v => { const s = String(v == null ? '' : v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\r\n'); }
+async function saveFile(filename, data, outSel){
+  const out = $(outSel || '#expMsg');
+  if (dl) {
+    try { await dl.save({filename, data}); msg(out, 'good', 'تم تجهيز الملف ' + filename); return true; }
+    catch (e) {
+      if (e && e.code === 'declined') { msg(out, 'warn', 'أُلغي الحفظ.'); return false; }
+      if (e && e.code !== 'unavailable' && e.code !== 'not_granted' && e.code !== 'capability_disabled' && e.code !== 'capability_removed') { msg(out, 'bad', 'تعذّر حفظ الملف. جرّب «نسخ للصق».'); return false; }
+    }
+  }
+  try {
+    const blob = data instanceof Blob ? data : new Blob([data], {type: 'text/csv'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    msg(out, 'good', 'بدأ تنزيل ' + filename); return true;
+  } catch (e) { msg(out, 'bad', 'التنزيل غير متاح هنا. استخدم «نسخ للصق».'); return false; }
+}
+const today = () => new Date().toISOString().slice(0, 10);
+function exportXlsx(){
+  const stores = scopeStores(), tables = stores.map(mainTable);
+  [newTable(stores), reviewTable(stores)].forEach(t => { if (t) tables.push(t); });
+  stores.forEach(st => tables.push(leftTable(st)));
+  const lt = logTable(stores); if (lt) tables.push(lt);
+  saveFile('inventory_' + (stores.length === 2 ? 'both' : stores[0] === 1 ? 'pharmacy' : 'internal') + '_' + today() + '.xlsx', buildXlsx(tables));
+}
+function exportCsv(){ const st = scopeStores()[0]; saveFile('inventory_' + (st === 1 ? 'pharmacy' : 'internal') + '_' + today() + '.csv', csvText(mainTable(st).rows)); }
+async function exportCopy(){
+  const st = scopeStores()[0], txt = mainTable(st).rows.map(r => r.join('\t')).join('\n');
+  try { await navigator.clipboard.writeText(txt); msg($('#expMsg'), 'good', 'تم النسخ. الصقه في Excel.'); }
+  catch (e) {
+    $('#expMsg').innerHTML = '<div class="note warn">تعذّر النسخ التلقائي. انسخ النص يدوياً:</div><textarea id="tsv" readonly rows="6" style="width:100%;margin-top:8px;font:14px monospace;direction:ltr"></textarea>';
+    $('#tsv').value = txt; $('#tsv').select();
+  }
+}
+
+function addedItems(){
+  const m = new Map();
+  [...S.entries.values()].filter(e => e.nw && !e.vd).sort((a, b) => (a.ts || 0) - (b.ts || 0)).forEach(e => m.set(nkeyOf(e), e));
+  return [...m.values()];
+}
+function renderDbInfo(){
+  const withBc = CATALOG.filter(it => it.b).length, add = addedItems().length;
+  $('#dbSummary').textContent = CATALOG.length.toLocaleString('en') + ' صنف، منها ' + withBc.toLocaleString('en') + ' بباركود' + (add ? ' ، و' + add + ' صنف جديد أضفته' : '') + '.';
+}
+function exportDb(){
+  const rows = [['رقم الصنف', 'الباركود', 'اسم الصنف', 'الشركة', 'الوحدة', 'المصدر']];
+  CATALOG.forEach(it => rows.push([it.i, it.bs.join(' / '), it.n, it.c || '', it.u || '', it.s ? 'قوائم الجرد' : 'قاعدة بيتاسيس']));
+  addedItems().forEach(e => rows.push([e.nid || 'جديد', e.bc || '', e.n, e.co || '', e.u || '', 'أُضيف من التطبيق']));
+  saveFile('items_database_' + today() + '.xlsx', buildXlsx([{name: 'قاعدة الأصناف', rows, widths: [14, 22, 50, 28, 12, 18]}]));
+}
+
+/* ---------- column settings ---------- */
+const COL_LABEL = {i: 'رقم الصنف', b: 'الباركود', n: 'اسم الصنف', u: 'الوحدة', q: 'الكمية', x: 'تاريخ الانتهاء', s: 'المخزن', t: 'ملاحظات', v: 'عمود فارغ', f: 'عمود صفر', w: 'العدّاد'};
+function saveSettings(){ lsSet('jard.settings', S.settings); }
+function renderCols(){
+  $('#dateFmt').value = S.settings.fmt;
+  $('#colsTbl').innerHTML = S.settings.cols.map((c, i) =>
+    '<tr><td><input type="checkbox" data-on="' + i + '"' + (c.on ? ' checked' : '') + ' aria-label="تضمين ' + esc(COL_LABEL[c.k]) + '"></td>' +
+    '<td class="muted" style="white-space:nowrap">' + esc(COL_LABEL[c.k]) + '</td>' +
+    '<td><input type="text" data-h="' + i + '" value="' + esc(c.h) + '" aria-label="عنوان العمود"></td>' +
+    '<td class="mv" style="white-space:nowrap"><button type="button" data-up="' + i + '" aria-label="أعلى">↑</button> <button type="button" data-dn="' + i + '" aria-label="أسفل">↓</button></td></tr>').join('');
+}
+
+/* ---------- events ---------- */
+let sugTimer;
+function submitScan(raw){
+  raw = latin(raw).trim();
+  if (!raw) return;
+  const it = lookup(raw);
+  if (it) { pick(it); return; }
+  if (/^N-[A-Za-z0-9]{5}$/.test(raw)) { const na = lookupNid(raw.toUpperCase()); if (na) { openNew(na.bc, na); return; } }
+  if (/^\d{6,}$/.test(raw)) {
+    const a = lookupAdded(raw);
+    if (a) { toast('صنف أُضيف سابقاً'); openNew(a.bc, a); return; }
+    toast('باركود غير موجود في قاعدة الأصناف'); openNew(raw); return;
+  }
+  const r = search(raw);
+  if (r.length === 1) pick(r[0]); else showSug(r, raw);
+}
+$('#scan').addEventListener('keydown', ev => {
+  if (ev.key !== 'Enter') return;
+  ev.preventDefault();
+  submitScan($('#scan').value);
+});
+$('#scan').addEventListener('input', () => {
+  clearTimeout(sugTimer);
+  const raw = latin($('#scan').value).trim();
+  if (raw.length < 2 || /^\d{8,}$/.test(raw)) { $('#sug').hidden = true; $('#idle').hidden = !!S.sel; return; }
+  sugTimer = setTimeout(() => showSug(search(raw), raw), 140);
+});
+function showSug(list, raw){
+  const box = $('#sug');
+  if (!list.length) { box.hidden = false; $('#idle').hidden = true; box.innerHTML = '<div class="idle">لا يوجد صنف بهذا الاسم في قاعدة الأصناف. يمكنك إضافته كصنف جديد.</div><div class="actions"><button type="button" class="btn small" data-addnew="1">إضافة «' + esc(raw) + '» كصنف جديد</button></div>'; box.dataset.raw = raw; return; }
+  box.hidden = false; $('#idle').hidden = true;
+  const counted = new Set(storeEntries(S.store).filter(e => !e.nw).map(e => e.iid));
+  box.innerHTML = list.map(it => '<button type="button" data-pick="' + esc(it.i) + '"><span class="ltr" style="text-align:right">' + esc(it.n) + '</span><small>' + (counted.has(it.i) ? '✓ جُرد · ' : '') + esc(it.c || it.u || '') + (!it.s ? ' · من القاعدة' : it.s & S.store ? '' : ' · مخزن آخر') + '</small></button>').join('');
+}
+$('#sug').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-pick]'); if (b) { pick(byId.get(b.dataset.pick)); return; }
+  if (ev.target.closest('[data-addnew]')) { const raw = $('#sug').dataset.raw || ''; openNew('', {n: /^\d+$/.test(raw) ? '' : raw}); }
+});
+$('#nHint').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-use]'); if (b) { pick(byId.get(b.dataset.use)); return; }
+  const a = ev.target.closest('[data-useadded]');
+  if (a) { let hit = null; S.entries.forEach(e => { if (e.nw && !e.vd && nkeyOf(e) === a.dataset.useadded && (!hit || (e.ts || 0) > (hit.ts || 0))) hit = e; }); if (hit) openNew(hit.bc, hit); }
+});
+$('#nHint').addEventListener('change', ev => { if (ev.target.id === 'nConfirm') S.nConfirm = ev.target.checked; });
+$('#nCo').addEventListener('input', newHint);
+$('#nBc').addEventListener('input', newHint); $('#nName').addEventListener('input', newHint);
+$('#chipsBox').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-ex]'); if (!b) return;
+  $('#exp').value = b.dataset.ex; refreshDraftInfo(); $('#qty').focus();
+});
+['#exp', '#nName', '#nBc'].forEach(s => $(s).addEventListener('input', refreshDraftInfo));
+$('#qty').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); const ex = $('#exp'); if (!ex.value && S.sel && !S.sel.nw && S.sel.it.e.length && !S.editing) ex.focus(); else save(); } });
+$('#exp').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); save(); } });
+$('#saveBtn').addEventListener('click', save);
+$('#cancelBtn').addEventListener('click', cancelForm);
+$('#newItemBtn').addEventListener('click', () => openNew(''));
+$('#st1').addEventListener('click', () => setStore(1));
+$('#st2').addEventListener('click', () => setStore(2));
+$('#tabEntry').addEventListener('click', () => setTab('entry'));
+$('#tabList').addEventListener('click', () => setTab('list'));
+$('#tabExport').addEventListener('click', () => setTab('export'));
+$('#tabReview').addEventListener('click', () => setTab('review'));
+$('#showVoid').addEventListener('change', () => { S.showVoid = $('#showVoid').checked; S.shown = 40; render(); });
+$('#bkBtn').addEventListener('click', exportBackup);
+$('#bkSkip').addEventListener('change', renderReview);
+$('#apBtn').addEventListener('click', approveClick);
+$('#reopenBtn').addEventListener('click', reopenClick);
+$('#pReview').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-rv]'); if (!b) return;
+  const act = b.dataset.rv;
+  if (!S.who) { toast('اكتب اسمك في شاشة الإدخال أولاً'); return; }
+  if (sessionApproved()) { toast('الجرد معتمد. أعد فتحه أولاً'); return; }
+  if (act === 'link') { rvSave({id: 'L_' + hashStr(b.dataset.nk), kind: 'link', nk: b.dataset.nk, iid: b.dataset.iid, nm: b.dataset.nm, by: S.who}); return; }
+  if (act === 'nolink') { rvSave({id: 'NL_' + hashStr(b.dataset.nk), kind: 'nolink', nk: b.dataset.nk, by: S.who}); return; }
+  if (act === 'unlink') { rvRemove('L_' + hashStr(b.dataset.nk)); return; }
+  const g = RVG.find(x => x.k === b.dataset.k); if (!g) return;
+  const card = b.closest('.rvcard');
+  if (act === 'pick') decide(g, 'pick', {pick: b.dataset.id});
+  else if (act === 'manual') { const q = parseQty(card.querySelector('.rq').value); if (q == null) { toast('اكتب الكمية بالأرقام'); return; } decide(g, 'manual', {q}); }
+  else if (act === 'sum') { const why = card.querySelector('.rr').value.trim(); if (why.length < 3) { toast('اكتب سبب الجمع أولاً'); card.querySelector('.rr').focus(); return; } decide(g, 'sum', {reason: why}); }
+  else if (act === 'recount') decide(g, 'recount', {});
+  else if (act === 'undo') rvRemove(decId(g.k));
+});
+$('#listQ').addEventListener('input', () => { S.shown = 40; render(); });
+$('#moreBtn').addEventListener('click', () => { S.shown += 60; render(); });
+document.addEventListener('click', ev => {
+  const ed = ev.target.closest('[data-edit]'); if (ed) { editEntry(ed.dataset.edit); return; }
+  const dd = ev.target.closest('[data-del]'); if (dd) { removeEntry(dd.dataset.del); return; }
+  const rs = ev.target.closest('[data-restore]'); if (rs) restoreEntry(rs.dataset.restore);
+});
+document.querySelectorAll('input[name=scope]').forEach(r => r.addEventListener('change', renderExportInfo));
+$('#xlsxBtn').addEventListener('click', exportXlsx);
+$('#dbBtn').addEventListener('click', exportDb);
+$('#coList').innerHTML = CAT.co.filter(Boolean).map(c => '<option value="' + esc(c) + '">').join('');
+$('#csvBtn').addEventListener('click', exportCsv);
+$('#copyBtn').addEventListener('click', exportCopy);
+$('#presetAr').addEventListener('click', () => { S.settings.cols = DEFAULT_COLS.ar.map(c => ({...c})); saveSettings(); renderCols(); });
+$('#presetEn').addEventListener('click', () => { S.settings.cols = DEFAULT_COLS.en.map(c => ({...c})); saveSettings(); renderCols(); });
+$('#presetCode').addEventListener('click', () => { S.settings.cols = DEFAULT_COLS.code.map(c => ({...c})); saveSettings(); renderCols(); });
+$('#presetPrint').addEventListener('click', () => { S.settings.cols = DEFAULT_COLS.print.map(c => ({...c})); saveSettings(); renderCols(); });
+$('#dateFmt').addEventListener('change', () => { S.settings.fmt = $('#dateFmt').value; saveSettings(); });
+$('#colsTbl').addEventListener('input', ev => {
+  const t = ev.target;
+  if (t.dataset.h != null) S.settings.cols[+t.dataset.h].h = t.value;
+  if (t.dataset.on != null) S.settings.cols[+t.dataset.on].on = t.checked;
+  saveSettings();
+});
+$('#colsTbl').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  const c = S.settings.cols, up = b.dataset.up, dn = b.dataset.dn;
+  if (up != null && +up > 0) { const i = +up; [c[i - 1], c[i]] = [c[i], c[i - 1]]; }
+  else if (dn != null && +dn < c.length - 1) { const i = +dn; [c[i + 1], c[i]] = [c[i], c[i + 1]]; }
+  else return;
+  saveSettings(); renderCols();
+});
+
+/* ---------- camera: one photo per scan (live video is blocked inside this page) ---------- */
+function loadZXing(){
+  if (window.ZXing) return Promise.resolve();
+  return new Promise((ok, no) => { const el = document.createElement('script'); el.src = 'https://unpkg.com/@zxing/library@0.21.3'; el.onload = ok; el.onerror = () => no(new Error('zxing')); document.head.appendChild(el); });
+}
+async function scaledBlob(file, max){
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  if (bmp.close) bmp.close();
+  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+}
+async function decodePhoto(file){
+  if ('BarcodeDetector' in window) {
+    try {
+      const det = new BarcodeDetector(), bmp = await createImageBitmap(file);
+      const r = await det.detect(bmp); if (bmp.close) bmp.close();
+      if (r && r.length) { const n = r.find(x => /^\d{6,}$/.test(x.rawValue)); return (n || r[0]).rawValue; }
+    } catch (e) { /* try the library below */ }
+  }
+  await loadZXing();
+  const url = URL.createObjectURL(await scaledBlob(file, 1600));
+  try {
+    const hints = new Map(); hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    const res = await new ZXing.BrowserMultiFormatReader(hints).decodeFromImageUrl(url);
+    return res.getText();
+  } finally { URL.revokeObjectURL(url); }
+}
+$('#camBtn').addEventListener('click', () => $('#cam').click());
+$('#cam').addEventListener('change', async ev => {
+  const f = ev.target.files && ev.target.files[0]; ev.target.value = '';
+  if (!f) return;
+  toast('جارٍ قراءة الباركود…');
+  try {
+    const code = await decodePhoto(f);
+    if (!code) { toast('لم أقرأ باركوداً. صوّر الباركود وحده بإضاءة جيدة.'); return; }
+    $('#toast').classList.remove('on');
+    submitScan(String(code));
+  } catch (e) { toast('تعذّرت القراءة. اكتب الباركود يدوياً.'); }
+});
+
+if (window.__NAME) { S.who = window.__NAME; $('#who').readOnly = true; $('#who').closest('.field').querySelector('label').textContent = 'اسمك (من حسابك)'; }
+$('#who').value = S.who;
+$('#who').addEventListener('input', () => { if (window.__NAME) { $('#who').value = S.who; return; } S.who = $('#who').value.trim(); lsSet('jard.who', S.who); });
+if (IS_COUNTER) { $('#tabReview').hidden = true; $('#tabExport').hidden = true; }
+if (UID) {
+  const lb = $('#logoutBtn'); lb.hidden = false;
+  lb.addEventListener('click', () => {
+    const unsent = [...S.entries.values()].some(e => e._p) || [...RV.map.values()].some(d => d._p);
+    if (unsent && !lb.dataset.armed) { lb.dataset.armed = '1'; lb.classList.add('arm'); lb.textContent = 'يوجد عدّ لم يُرسل. اضغط للخروج'; setTimeout(() => { delete lb.dataset.armed; lb.classList.remove('arm'); lb.textContent = 'خروج'; }, 4000); return; }
+    if (window.__logout) window.__logout();
+  });
+}
+async function renderAdmin(){
+  if (ROLE !== 'admin' || !window.__admin) return;
+  $('#adminCard').hidden = false;
+  try {
+    const list = await window.__admin.listStaff();
+    $('#staffList').innerHTML = list.length ? list.map(x => '<div class="stf"><span>' + esc(x.name || '') + ' <span class="muted ltr">' + esc(x.id) + '</span></span><span>' + (x.role === 'admin' ? 'مشرف' : 'عدّاد') + (x.active ? '' : ' · <b style="color:var(--bad)">معطّل</b>') + '</span></div>').join('') : '<div class="idle">لا يوجد موظفون.</div>';
+  } catch (e) { $('#staffList').innerHTML = '<div class="idle">تعذّر تحميل القائمة.</div>'; }
+  $('#catFile').addEventListener('change', async ev => {
+    const f = ev.target.files && ev.target.files[0]; ev.target.value = '';
+    const out = $('#catMsg'); if (!f) return;
+    try {
+      const o = JSON.parse(await f.text());
+      if (!o || !Array.isArray(o.it) || !o.it.length || !Array.isArray(o.it[0]) || o.it[0].length < 5) throw new Error('bad');
+      msg(out, 'warn', 'جارٍ رفع ' + o.it.length + ' صنف…');
+      await window.__admin.saveCatalog(o);
+      msg(out, 'good', 'تم رفع ' + o.it.length + ' صنف. أعد فتح الصفحة لتظهر الأصناف الجديدة.');
+    } catch (e) { msg(out, 'bad', 'تعذّر الرفع: ' + (e && e.message === 'bad' ? 'الملف ليس قاعدة أصناف صحيحة.' : (e && (e.code || e.message)) || 'خطأ')); }
+  });
+}
+showForm(); renderCols(); render(); setStatus(); connect(); renderAdmin();
+
+};
+</script>
+<script src="config.js"></script>
+<script type="module" src="boot.js"></script>
+</body>
+</html>
