@@ -1037,12 +1037,12 @@ function renderReview(){
   const gs = computeGroups(); RVG = gs;
   const pend = gs.filter(g => PEND.has(g.state)), matches = gs.filter(g => g.state === 'match'), done = gs.filter(g => g.state === 'resolved');
   const recs = [...S.entries.values()].filter(live), names = new Map();
-  recs.forEach(e => { const n = e.by || '؟'; let o = names.get(n); if (!o) names.set(n, o = {c: 0, dv: new Set()}); o.c++; if (e.dv) o.dv.add(e.dv); });
+  recs.forEach(e => { const n = e.by || '؟'; let o = names.get(n); if (!o) names.set(n, o = {c: 0, dv: new Set()}); o.c++; const who = UID ? e.uid : e.dv; if (who) o.dv.add(who); });   // with accounts: one person on several phones is fine; warn only if two accounts share a name
   const dup = [...names.entries()].filter(([, o]) => o.dv.size > 1).map(([n]) => n);
   const ses = RV.map.get('SESSION'), ap = sessionApproved();
   $('#rvSummary').innerHTML = '<div>' + recs.length + ' سجل عدّ فعّال من ' + names.size + ' موظف/جهاز: ' + [...names.entries()].map(([n, o]) => '<b>' + esc(n) + '</b> (' + o.c + ')').join('، ') + '</div>' +
     '<div class="hint">تحتاج قراراً: <b>' + pend.length + '</b> · متطابقة: ' + matches.length + ' · محسومة: ' + done.length + '</div>' +
-    (dup.length ? '<div class="note warn">الاسم ' + dup.map(esc).join('، ') + ' مستخدم على أكثر من جهاز. استعمل اسماً مختلفاً لكل جهاز.</div>' : '');
+    (dup.length ? '<div class="note warn">الاسم ' + dup.map(esc).join('، ') + (UID ? ' مستخدم لأكثر من حساب. اجعل لكل موظف اسماً مختلفاً في staff.</div>' : ' مستخدم على أكثر من جهاز. استعمل اسماً مختلفاً لكل جهاز.</div>') : '');
   $('#rvConf').innerHTML = pend.length ? pend.map(conflictCard).join('') : '<div class="idle">لا توجد أصناف تحتاج قراراً.</div>';
   $('#rvMatch').innerHTML = matches.length ? matches.map(g => '<div class="rvcard" data-k="' + esc(g.k) + '">' + itemLine(g) + recRows(g, false) + sumRow(g) + '</div>').join('') : '<div class="idle">لا يوجد.</div>';
   const links = linkSuggestions(), lk = [...RV.links.entries()];
