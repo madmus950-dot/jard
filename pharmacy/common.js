@@ -46,8 +46,8 @@ export function searchItems(store, q, lim) {
   // بحث بالنطق: عربي ← اسم إنجليزي
   const pq = phon(q).replace(/ /g, '');
   if (out.length < lim && pq.length >= 3) {
-    const qv = phonV(q), cand = [];
-    const common = a => { let i = 0; while (i < a.length && i < qv.length && a[i] === qv[i]) i++; return i; };
+    const qv0 = phonV(q), qlead = /^[aoi]/.test(qv0), qv = qv0.replace(/^[aoi]/, ''), cand = [];
+    const common = a0 => { const a = a0.replace(/^[aoi]/, ''); let i = 0; while (i < a.length && i < qv.length && a[i] === qv[i]) i++; return i + (qlead && /^[aoi]/.test(a0) ? 0.5 : 0); };
     for (const x of itemIndex(store).list) {
       if (seen.has(x.it.id)) continue;
       if (x.ph.startsWith(pq)) cand.push([x.it, 100 + common(x.pv)]);

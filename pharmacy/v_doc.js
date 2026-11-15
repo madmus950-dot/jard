@@ -75,9 +75,18 @@ export function docView(ctx, t) {
     change();
     setTimeout(() => { const first = $('.line input.q', lines); if (isBuy && first) first.select(); }, 30);
   }
-  function lookup(code) {
+  async function lookup(code) {
     const f = findBarcode(store, code);
     if (f && f.it) { addItem(f.it, f.u); return true; }
+    // أرشيف أصناف BetaSys (من تطبيق الجرد): صنف قديم لم يُستورد بعد
+    const old = ctx.can('item-add') ? await archiveFind(ctx, code) : null;
+    if (old) {
+      toast('صنف من الأرشيف: ' + old.n, { action: { label: 'إضافة للفاتورة', fn: async () => {
+        const id = await store.put('items', old.id, { n: old.n, bc: old.bc, co: old.co, u: [{ n: old.un || 'علبة', s: 1, p: 0 }], c0: 0, act: true, at: Date.now(), arc: true });
+        const it = store.items.get(id); if (it) { addItem(it, 0); toast('أُضيف. اكتب سعره في الفاتورة ثم عدّله من بطاقة الصنف.'); }
+      } } });
+      return false;
+    }
     toast('الباركود ' + code + ' غير مسجّل', ctx.can('item-add') ? { bad: true, action: { label: 'إضافة صنف', fn: () => { persist(D); ctx.go('item-edit/' + encodeURIComponent('bc:' + code)); } } } : { bad: true });
     return false;
   }
@@ -234,4 +243,20 @@ export function docView(ctx, t) {
     title: M.title, sub: D.ln.length ? 'مسودة محفوظة' : '', el, foot,
     onShow: () => { if (!isBuy) setTimeout(() => input.focus(), 60); }
   };
+}
+
+/* أرشيف الأصناف: يُحمَّل مرة واحدة عند الحاجة فقط */
+let ARC = null;
+async function archiveFind(ctx, code) {
+  try {
+    if (!ARC) {
+      if (!ctx.be.loadArchive) return null;
+      const a = await ctx.be.loadArchive(); if (!a) return null;
+      const m = new Map();
+      for (const r of a.it) for (const b of String(r[1] || '').split('|')) if (b) m.set(b, { id: String(r[0]).replace(/[\/\s]+/g, '_'), bc: String(r[1]).split('|').filter(Boolean), n: r[2], un: a.un[r[3]] || '', co: a.co[r[4]] || '' });
+      ARC = m;
+    }
+    const x = ARC.get(String(code).trim());
+    return x && !ctx.store.items.has(x.id) ? x : null;
+  } catch (e) { return null; }
 }

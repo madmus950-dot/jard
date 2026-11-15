@@ -102,16 +102,20 @@ export function phon(s) {
   }
   return out.replace(/(.)\1+/g, '$1').replace(/\s+/g, ' ').trim();
 }
-/** نفس الهيكل لكن مع مواضع حروف العلة (كلها «a»)، لترتيب الأقرب نطقاً */
+/** نفس الهيكل مع حروف العلة (a / o / i)، لترتيب الأقرب نطقاً */
 export function phonV(s) {
   s = String(s || '').toLowerCase();
   let out = '';
-  if (/[؀-ۿ]/.test(s)) {
-    for (const ch of s) { if (AR_PH[ch]) out += AR_PH[ch]; else if ('اأإآىوي'.includes(ch)) out += 'a'; else if (ch === ' ') break; }
+  if (/[\u0600-\u06FF]/.test(s)) {
+    for (const ch of s) {
+      if (AR_PH[ch]) out += AR_PH[ch];
+      else if ('اأإآى'.includes(ch)) out += 'a'; else if (ch === 'و') out += 'o'; else if (ch === 'ي') out += 'i';
+      else if (ch === ' ') break;
+    }
   } else {
     s = s.split(' ')[0].replace(/ph/g, 'f').replace(/th/g, 't').replace(/ch/g, 'sh').replace(/sh/g, 's').replace(/ck/g, 'k').replace(/x/g, 'ks')
       .replace(/c(?=[eiy])/g, 's').replace(/c/g, 'k').replace(/q/g, 'k').replace(/p/g, 'b').replace(/v/g, 'f').replace(/g/g, 'j').replace(/w/g, '');
-    for (const ch of s) { if ('bdfhjklmnrstz'.includes(ch)) out += ch; else if ('aeiouy'.includes(ch)) out += 'a'; }
+    for (const ch of s) { if ('bdfhjklmnrstz'.includes(ch)) out += ch; else if (ch === 'a') out += 'a'; else if (ch === 'o' || ch === 'u') out += 'o'; else if ('eiy'.includes(ch)) out += 'i'; }
   }
   return out.replace(/(.)\1+/g, '$1');
 }
