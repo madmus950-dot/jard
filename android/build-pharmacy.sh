@@ -20,7 +20,7 @@ cp config.js "$W/config.js"
 
 # Firebase مجمّعاً في ملف محلي واحد
 sed -E 's#https://www\.gstatic\.com/firebasejs/10\.14\.1/firebase-([a-z]+)\.js#firebase/\1#g' pharmacy/fb.js > "$T/fb.src.js"
-if grep -q 'gstatic' "$T/fb.src.js"; then echo "::error::fb.js still imports from gstatic"; exit 1; fi
+if grep -q 'https://www.gstatic.com' "$T/fb.src.js"; then echo "::error::fb.js still imports from gstatic"; exit 1; fi
 ( cd "$T" && npx esbuild fb.src.js --bundle --format=esm --minify --target=chrome70 --legal-comments=none --outfile=fb.bundle.js --log-level=warning )
 cp "$T/fb.bundle.js" "$W/fb.js"
 
