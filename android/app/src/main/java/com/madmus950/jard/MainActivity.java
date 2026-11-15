@@ -1,5 +1,6 @@
 package com.madmus950.jard;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
@@ -7,16 +8,20 @@ import android.content.ClipboardManager;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.print.PrintAttributes;
+import android.print.PrintManager;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.view.Gravity;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -43,11 +48,14 @@ public class MainActivity extends Activity {
     static final String HOST = "appassets.androidplatform.net";
     static final String START = "https://" + HOST + "/index.html";
     static final int REQ_FILES = 41;
+    static final int REQ_CAM = 42;
 
     private WebView web;
     private ValueCallback<Uri[]> pending;
     private File camFile;
     private Uri camUri;
+    private PermissionRequest pendingPerm;
+    private boolean pendingCapture;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -97,6 +105,21 @@ public class MainActivity extends Activity {
 
         web.setWebChromeClient(new WebChromeClient() {
             @Override
+            public void onPermissionRequest(final PermissionRequest r) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        boolean video = false;
+                        for (String res : r.getResources()) if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(res)) video = true;
+                        if (!video || !declaresCamera()) { r.deny(); return; }
+                        if (cameraGranted()) { r.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE}); return; }
+                        pendingPerm = r;
+                        requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAM);
+                    }
+                });
+            }
+
+            @Override
             public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb, FileChooserParams p) {
                 if (pending != null) pending.onReceiveValue(null);
                 pending = cb;
@@ -104,6 +127,11 @@ public class MainActivity extends Activity {
                 camUri = null;
                 String[] types = p.getAcceptTypes();
                 boolean image = types != null && types.length > 0 && types[0] != null && types[0].startsWith("image/");
+                if (p.isCaptureEnabled() && declaresCamera() && !cameraGranted()) {
+                    pendingCapture = true;
+                    requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAM);
+                    return true;
+                }
                 if (p.isCaptureEnabled()) {
                     Intent cam = cameraIntent();
                     if (cam != null) {
@@ -155,6 +183,46 @@ public class MainActivity extends Activity {
             camFile = null;
             camUri = null;
             return null;
+        }
+    }
+
+    boolean declaresCamera() {
+        try {
+            String[] perms = getPackageManager().getPackageInfo(getPackageName(), PackageManager.GET_PERMISSIONS).requestedPermissions;
+            if (perms != null) for (String x : perms) if (Manifest.permission.CAMERA.equals(x)) return true;
+        } catch (Exception e) {
+            // ignore
+        }
+        return false;
+    }
+
+    boolean cameraGranted() {
+        return Build.VERSION.SDK_INT < 23 || checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int req, String[] perms, int[] res) {
+        super.onRequestPermissionsResult(req, perms, res);
+        if (req != REQ_CAM) return;
+        boolean ok = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
+        if (pendingPerm != null) {
+            if (ok) pendingPerm.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
+            else pendingPerm.deny();
+            pendingPerm = null;
+        }
+        if (pendingCapture) {
+            pendingCapture = false;
+            Intent i = ok ? cameraIntent() : null;
+            if (i == null) {
+                i = new Intent(Intent.ACTION_GET_CONTENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("image/*");
+            }
+            try {
+                startActivityForResult(i, REQ_FILES);
+            } catch (Exception e) {
+                if (pending != null) { pending.onReceiveValue(null); pending = null; }
+            }
         }
     }
 
@@ -256,6 +324,40 @@ public class MainActivity extends Activity {
                 }
             });
             return "ok";
+        }
+
+        @JavascriptInterface
+        public void shareText(final String text) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Intent s = new Intent(Intent.ACTION_SEND);
+                    s.setType("text/plain");
+                    s.putExtra(Intent.EXTRA_TEXT, text);
+                    try {
+                        startActivity(Intent.createChooser(s, "مشاركة"));
+                    } catch (Exception e) {
+                        // no app to share with
+                    }
+                }
+            });
+        }
+
+        /** طباعة ما في #print عبر خدمة الطباعة في أندرويد (طابعة أو حفظ PDF) */
+        @JavascriptInterface
+        public void print(final String title) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                        String job = title == null || title.isEmpty() ? "طباعة" : title;
+                        pm.print(job, web.createPrintDocumentAdapter(job), new PrintAttributes.Builder().build());
+                    } catch (Exception e) {
+                        toast("تعذّرت الطباعة على هذا الجهاز");
+                    }
+                }
+            });
         }
 
         /** يحفظ الملف في «التنزيلات/Jard» ثم يفتح قائمة الإرسال (واتساب وغيره). */

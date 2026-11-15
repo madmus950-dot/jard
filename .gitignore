@@ -3,3 +3,7 @@ android/build/
 android/app/build/
 android/local.properties
 android/app/src/main/assets/www/
+android/app/src/jard/assets/www/
+android/app/src/pharmacy/assets/www/
+pharmacy/demo/
+pharmacy/test/out/

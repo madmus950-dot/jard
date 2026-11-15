@@ -10,11 +10,25 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId 'com.madmus950.jard'
         minSdk 21
         targetSdk 34
         versionCode build
         versionName "1.0.${build}"
+    }
+
+    // تطبيقان من نفس الغلاف: الجرد، والحسابات
+    flavorDimensions = ['app']
+    productFlavors {
+        jard {
+            dimension 'app'
+            applicationId 'com.madmus950.jard'
+            resValue 'string', 'app_name', 'جرد الصيدلية'
+        }
+        pharmacy {
+            dimension 'app'
+            applicationId 'com.madmus950.pharmacy'
+            resValue 'string', 'app_name', 'حسابات الصيدلية'
+        }
     }
 
     signingConfigs {

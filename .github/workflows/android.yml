@@ -8,6 +8,7 @@ on:
       - boot.js
       - fbsdk.js
       - config.js
+      - pharmacy/**
       - android/**
       - .github/workflows/android.yml
   workflow_dispatch:
@@ -30,18 +31,21 @@ jobs:
         with:
           node-version: 20
 
-      - name: Web assets (local Firebase + ZXing)
+      - name: Web assets (local Firebase, ZXing, fonts)
         run: |
-          set -o pipefail
-          if ! bash android/build-web.sh > web.log 2>&1; then
-            cat web.log
-            tail -n 40 web.log | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'NF' > tail.txt
+          report() {
+            cat "$1"
+            tail -n 40 "$1" | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'NF' > tail.txt
             split -l 10 tail.txt chunk_
-            for f in chunk_*; do echo "::error title=web assets::$(sed ':a;N;$!ba;s/\n/%0A/g' "$f")"; done
-            exit 1
-          fi
+            for f in chunk_*; do echo "::error title=$2::$(sed ':a;N;$!ba;s/\n/%0A/g' "$f")"; done
+            rm -f chunk_* tail.txt
+          }
+          if ! bash android/build-web.sh > web.log 2>&1; then report web.log jard-assets; exit 1; fi
           cat web.log
-          (cd android/app/src/main/assets && zip -qr "$GITHUB_WORKSPACE/web-assets.zip" www)
+          if ! bash android/build-pharmacy.sh > ph.log 2>&1; then report ph.log pharmacy-assets; exit 1; fi
+          cat ph.log
+          (cd android/app/src/jard/assets && zip -qr "$GITHUB_WORKSPACE/web-assets.zip" www)
+          (cd android/app/src/pharmacy/assets && zip -qr "$GITHUB_WORKSPACE/pharmacy-assets.zip" www)
 
       - uses: actions/setup-java@v4
         with:
@@ -52,7 +56,7 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build APK
+      - name: Build APKs
         working-directory: android
         run: |
           if ! gradle --no-daemon --console=plain assembleRelease > build.log 2>&1; then
@@ -64,18 +68,21 @@ jobs:
             exit 1
           fi
           tail -n 20 build.log
-          ls -la app/build/outputs/apk/release/
+          find app/build/outputs/apk -name '*.apk' -exec ls -la {} \;
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           V="1.0.${{ github.run_number }}"
-          cp android/app/build/outputs/apk/release/app-release.apk "jard-$V.apk"
+          cp android/app/build/outputs/apk/jard/release/app-jard-release.apk "jard-$V.apk"
+          cp android/app/build/outputs/apk/pharmacy/release/app-pharmacy-release.apk "pharmacy-$V.apk"
           cp "jard-$V.apk" jard.apk
-          NOTES="تطبيق جرد الصيدلية لأندرويد — نسخة $V. ثبّت الملف jard.apk فوق النسخة السابقة مباشرة (لا حاجة لحذفها)."
+          cp "pharmacy-$V.apk" pharmacy.apk
+          NOTES="نسخة $V: jard.apk تطبيق الجرد، pharmacy.apk تطبيق حسابات الصيدلية. ثبّت كل ملف فوق نسخته السابقة مباشرة."
+          FILES="jard-$V.apk pharmacy-$V.apk jard.apk pharmacy.apk web-assets.zip pharmacy-assets.zip"
           if gh release view "v$V" >/dev/null 2>&1; then
-            gh release upload "v$V" "jard-$V.apk" jard.apk web-assets.zip --clobber
+            gh release upload "v$V" $FILES --clobber
           else
-            gh release create "v$V" "jard-$V.apk" jard.apk web-assets.zip --title "جرد الصيدلية $V" --notes "$NOTES" --latest
+            gh release create "v$V" $FILES --title "تطبيقات الصيدلية $V" --notes "$NOTES" --latest
           fi

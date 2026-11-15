@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null && request.auth.token.email != null; }
+    function staffPath() { return /databases/$(database)/documents/staff/$(request.auth.token.email); }
+    function isStaff() { return signedIn() && exists(staffPath()) && get(staffPath()).data.active == true; }
+    function isAdmin() { return isStaff() && get(staffPath()).data.role == 'admin'; }
+    function myName() { return get(staffPath()).data.name; }
+
+    // ---------- الحسابات: الصلاحية من الحقل acc (admin أو cashier)، ومشرف الجرد مشرف هنا أيضاً ----------
+    function accRole() {
+      let s = get(staffPath()).data;
+      return s.get('acc', s.role == 'admin' ? 'admin' : '');
+    }
+    function accStaff() { return isStaff() && accRole() in ['admin', 'cashier']; }
+    function accAdmin() { return isStaff() && accRole() == 'admin'; }
+    function stamped() { return request.resource.data.u_ == request.time; }
+
+    function sessionOpen() {
+      return !exists(/databases/$(database)/documents/review/SESSION)
+        || get(/databases/$(database)/documents/review/SESSION).data.status != 'approved';
+    }
+
+    function validCount() {
+      let d = request.resource.data;
+      return d.uid == request.auth.uid
+        && d.by == myName()
+        && d.q is number && d.q >= 0 && d.q < 1000000
+        && d.st in [1, 2]
+        && d.nw is bool
+        && d.n is string && d.n.size() > 0 && d.n.size() <= 200
+        && d.ex is string && d.ex.size() <= 10;
+    }
+
+    match /staff/{email} {
+      allow read: if signedIn() && (request.auth.token.email == email || isAdmin());
+      // المشرف يحدد صلاحية الحسابات للموظفين من داخل التطبيق
+      allow update: if isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['acc']);
+      allow create, delete: if false;
+    }
+
+    // ---------- تطبيق الجرد ----------
+    match /catalog/{part} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+    match /count/{id} {
+      allow read: if isStaff();
+      allow create: if isStaff() && sessionOpen() && validCount();
+      allow update: if isStaff() && sessionOpen()
+                    && resource.data.uid == request.auth.uid
+                    && validCount()
+                    && request.resource.data.uid == resource.data.uid
+                    && request.resource.data.by == resource.data.by
+                    && request.resource.data.ct == resource.data.ct;
+      allow delete: if false;
+    }
+    match /review/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
+    // ---------- تطبيق الحسابات ----------
+    // السندات لا تُحذف ولا تُعدَّل: الإلغاء فقط (للمشرف)، ويبقى السند في السجل
+    match /acc_v/{id} {
+      allow read: if accStaff();
+      allow create: if accStaff() && stamped()
+                    && request.resource.data.by == request.auth.uid
+                    && request.resource.data.st == 'ok'
+                    && (accAdmin() || request.resource.data.t in ['sale', 'sret', 'rcpt', 'pur']);
+      allow update: if accStaff() && stamped() && (
+                      (accAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st', 'vd', 'u_']))
+                      || (resource.data.by == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['u_'])));
+      allow delete: if false;
+    }
+    match /acc_items/{id} {
+      allow read: if accStaff();
+      allow create: if accStaff() && stamped();
+      allow update: if accStaff() && stamped() && (accAdmin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['u', 'u_']));
+      allow delete: if false;
+    }
+    match /acc_parties/{id} {
+      allow read: if accStaff();
+      allow create, update: if accStaff() && stamped();
+      allow delete: if false;
+    }
+    match /acc_accounts/{id} {
+      allow read: if accStaff();
+      allow write: if accAdmin() && stamped();
+    }
+    match /acc_meta/{id} {
+      allow read: if accStaff();
+      allow write: if stamped() && (accAdmin() || (accStaff() && id.matches('dev_.*')));
+    }
+
+    // أي شيء آخر ممنوع
+  }
+}

@@ -4,7 +4,7 @@
 # يُشغَّل من جذر المستودع داخل GitHub Actions.
 set -euo pipefail
 
-W=android/app/src/main/assets/www
+W=android/app/src/jard/assets/www
 rm -rf "$W"
 mkdir -p "$W/vendor"
 
