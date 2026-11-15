@@ -126,7 +126,8 @@ jobs:
           npm version "1.0.${{ github.run_number }}" --no-git-tag-version --allow-same-version
           if ! npm install --no-audit --no-fund > npm.log 2>&1; then report npm.log npm; exit 1; fi
           if ! npx electron-builder --win nsis --x64 --publish never > b64.log 2>&1; then report b64.log win-x64; exit 1; fi
-          if ! npx electron-builder --win nsis --ia32 --publish never > b32.log 2>&1; then report b32.log win-ia32; exit 1; fi
+          # إلكترون 44 لم يعد يصدر نسخة 32 بت، فالمثبّت 32 بت من آخر نسخة 43
+          if ! npx electron-builder --win nsis --ia32 --publish never -c.electronVersion=43.8.10 > b32.log 2>&1; then report b32.log win-ia32; exit 1; fi
           ls -la dist
 
       - name: Attach to release
