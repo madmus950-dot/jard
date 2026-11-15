@@ -121,7 +121,7 @@ function draw(keepScroll) {
   app.textContent = '';
   app.appendChild(bar(v));
   app.appendChild(h('main', null, v.el));
-  if (!cur.opt.form) app.appendChild(nav(cur.opt.root));
+  if (!cur.opt.form || WIDE.matches) app.appendChild(nav(cur.opt.root));
   if (v.foot) app.appendChild(v.foot);
   if (keepScroll) window.scrollTo(0, y);
   syncChip();
@@ -140,7 +140,7 @@ function syncChip() {
   const s = store.status;
   let cls = '', txt = 'متزامن';
   if (s.pending) { cls = 'wait'; txt = 'بانتظار الرفع ' + s.pending; }
-  if (!s.online) { cls = 'off'; txt = s.pending ? 'بلا إنترنت · ' + s.pending : 'بلا إنترنت'; }
+  if (!s.online) { cls = 'off'; txt = s.pending ? 'بلا إنترنت، ' + s.pending : 'بلا إنترنت'; }
   else if (s.error && s.error !== 'unavailable') { cls = 'err'; txt = s.error === 'permission-denied' ? 'لا صلاحية' : 'خطأ مزامنة'; }
   else if (!s.ready && !s.pending) { cls = 'wait'; txt = 'جارٍ التحديث'; }
   el.className = 'sync ' + cls + (el.classList.contains('dot') ? ' dot' : ''); el.lastChild.textContent = txt; el.title = txt;
@@ -155,6 +155,31 @@ function nav(on) {
     b('more', 'المزيد', 'more', 'more')));
 }
 setInterval(() => syncChip(), 2000);
+
+/* ---------- الكمبيوتر: شاشة عريضة واختصارات لوحة المفاتيح وقارئ الباركود ---------- */
+const WIDE = matchMedia('(min-width: 1000px)');
+WIDE.addEventListener('change', () => { if (cur) draw(true); });
+document.addEventListener('keydown', e => {
+  if (!ctx || !cur) return;
+  const k = e.key, open = document.querySelector('.sheetwrap, .cam');
+  if (k === 'Escape') {
+    if (open) { e.preventDefault(); history.back(); return; }
+    const si = cur.v && cur.v.scanInput;
+    if (si && si.value) { e.preventDefault(); si.value = ''; si.dispatchEvent(new Event('input')); si.focus(); }
+    return;
+  }
+  if (open) return;
+  if (k === 'F2') { e.preventDefault(); if (cur.path === 'sale' && cur.v.scanInput) cur.v.scanInput.focus(); else if (ctx.can('sale')) ctx.go('sale'); return; }
+  if (k === 'F3') { e.preventDefault(); const i = (cur.v && cur.v.scanInput) || document.querySelector('main input[type=search]'); if (i) i.focus(); return; }
+  if (k === 'F9') { e.preventDefault(); const b = document.querySelector('.foot .actions .btn:not(.ghost)'); if (b && !b.disabled) b.click(); return; }
+  if (cur.v && cur.v.keys && cur.v.keys[k]) { e.preventDefault(); cur.v.keys[k](); return; }
+  // قارئ الباركود يكتب كلوحة مفاتيح: إن لم يكن المؤشر في حقل، وجّه الكتابة إلى خانة البحث
+  const a = document.activeElement, typing = a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable);
+  if (!typing && cur.v && cur.v.scanInput && k.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    e.preventDefault();
+    const si = cur.v.scanInput; si.focus(); si.value += k; si.dispatchEvent(new Event('input'));
+  }
+});
 
 /* ---------- البدء ---------- */
 async function boot() {

@@ -3,7 +3,7 @@ import { h, icon, toast, field, numField, seg, confirmBox, sheet, put } from './
 import { money, price, qty, norm, dmy, today, num, r2, newId } from './util.js';
 import { totals, check, TYPES, STORES, PARTY_TYPES, describe } from './engine.js';
 import { typeName, voucherLine, partyName, units, printVoucher, cashAccounts } from './common.js';
-import { shareText } from './out.js';
+import { shareText, printHtml } from './out.js';
 
 export function moreView(ctx) {
   const it = (k, label, sub, ic, href) => ctx.can(k) ? h('a', { class: 'ln link', href: '#/' + href }, h('span', { class: 'k', style: { display: 'flex', gap: '12px', alignItems: 'center' } }, icon(ic, 22), h('span', null, h('b', null, label), sub ? h('small', null, sub) : null)), icon('fwd', 18)) : null;
@@ -146,6 +146,7 @@ export function settingsView(ctx) {
       h('div', { class: 'row2' }, field('العنوان', h('input', { value: S.addr, on: { input: e => { S.addr = e.target.value; } } })), field('الهاتف', h('input', { value: S.ph, class: 'num', on: { input: e => { S.ph = e.target.value; } } }))),
       field('سطر أسفل الفاتورة', h('input', { value: S.foot, placeholder: 'شكراً لزيارتكم', on: { input: e => { S.foot = e.target.value; } } })),
       field('عرض ورق الطابعة', seg([[58, '58 ملم'], [80, '80 ملم']], +S.pw || 58, v => { S.pw = v; })),
+      desktopPrinter(),
       h('button', { class: 'btn wide', on: { click: () => save('حُفظت بيانات الصيدلية') } }, 'حفظ'),
       h('h3', { class: 'sect' }, 'قفل الفترة'),
       h('p', { class: 'muted', style: { margin: '0 4px 8px', fontSize: '14px' } }, 'بعد مراجعة شهر وإقفاله لا يمكن إضافة أو إلغاء أي سند بتاريخ فيه، فتبقى أرقامه ثابتة.'),
@@ -158,6 +159,21 @@ export function settingsView(ctx) {
       h('p', { class: 'muted', style: { margin: '0 4px 8px', fontSize: '14px' } }, 'أنشئ المستخدم أولاً في Firebase كما في تطبيق الجرد، ثم حدّد صلاحيته هنا.'),
       users)
   };
+}
+
+/** على الكمبيوتر: طابعة الإيصالات التي تُطبع عليها الفواتير مباشرة */
+function desktopPrinter() {
+  const A = window.JardApp;
+  if (!A || !A.printers) return null;
+  const sel = h('select', { on: { change: async e => { await A.setPrinter(e.target.value); toast(e.target.value ? 'تُطبع الفواتير مباشرة على ' + e.target.value : 'ستظهر نافذة الطباعة عند كل فاتورة'); } } }, h('option', { value: '' }, 'جارٍ تحميل الطابعات…'));
+  Promise.all([A.printers(), A.getPrinter()]).then(([list, cur]) => {
+    sel.textContent = '';
+    sel.appendChild(h('option', { value: '' }, 'اسألني عند كل طباعة'));
+    for (const p of list || []) sel.appendChild(h('option', { value: p.name, selected: p.name === cur }, (p.displayName || p.name) + (p.isDefault ? ' (الافتراضية)' : '')));
+  }).catch(() => { sel.textContent = ''; sel.appendChild(h('option', { value: '' }, 'تعذّر قراءة الطابعات')); });
+  return h('div', null,
+    field('طابعة الإيصالات (على هذا الكمبيوتر)', sel, 'الفواتير تُطبع عليها مباشرة دون نافذة. التقارير والكشوف تفتح نافذة الطباعة دائماً.'),
+    h('button', { class: 'btn ghost wide', style: { marginBottom: '12px' }, on: { click: () => printHtml('<div style="text-align:center"><h2>طباعة تجربة</h2><div>إن ظهرت هذه الورقة فالطابعة جاهزة.</div></div>', 'تجربة', 'receipt') } }, 'طباعة تجربة'));
 }
 
 /* ---------- الأرصدة الافتتاحية ---------- */

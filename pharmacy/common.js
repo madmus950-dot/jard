@@ -101,7 +101,7 @@ export function partyRows(store, types) {
     if (p.act === false || (types && !types.includes(p.t))) continue;
     const b = partyBalance(L, p.id);
     const w = balWords(b, p.t);
-    rows.push({ value: p, label: p.n, sub: PARTY_TYPES[p.t] + (p.ph ? ' · ' + p.ph : ''), side: w.amt ? money(w.amt) + ' ' + w.txt : '' });
+    rows.push({ value: p, label: p.n, sub: PARTY_TYPES[p.t] + (p.ph ? '، ' + p.ph : ''), side: w.amt ? money(w.amt) + ' ' + w.txt : '' });
   }
   return rows.sort((a, b) => a.label.localeCompare(b.label, 'ar'));
 }
@@ -128,7 +128,7 @@ export function voucherLine(store, v, opt = {}) {
   const amt = v.t === 'adj' || v.t === 'open' ? meta.tot : tt.tot;
   const sign = ['sale', 'rcpt'].includes(v.t) ? 'green' : ['pay'].includes(v.t) ? 'red' : '';
   return h('a', { class: 'ln link', href: '#/vch/' + encodeURIComponent(v.id) },
-    h('span', { class: 'k' }, h('b', null, typeName(v.t) + (v.no ? ' ' + v.no : '')), h('small', null, [dmy(v.d), who, v.st === 'void' ? 'ملغى' : ''].filter(Boolean).join(' · '))),
+    h('span', { class: 'k' }, h('b', null, typeName(v.t) + (v.no ? ' ' + v.no : '')), h('small', null, [dmy(v.d), who, v.st === 'void' ? 'ملغى' : ''].filter(Boolean).join('، '))),
     h('span', { class: 'v ' + (v.st === 'void' ? 'muted' : sign), style: v.st === 'void' ? { textDecoration: 'line-through' } : null }, h('span', { class: 'num' }, money(amt || 0))));
 }
 
@@ -146,7 +146,7 @@ export function printVoucher(store, v) {
   const html = `<div style="width:${width};margin:0 auto">
     <h2>${esc(S.name || 'الصيدلية')}</h2>
     ${S.addr || S.ph ? `<div class="pc">${esc([S.addr, S.ph].filter(Boolean).join(' — '))}</div>` : ''}
-    <div class="pc" style="margin:4px 0">${esc(typeName(v.t))} ${esc(v.no || '')} · ${dmy(v.d)}</div>
+    <div class="pc" style="margin:4px 0">${esc(typeName(v.t))} ${esc(v.no || '')}، ${dmy(v.d)}</div>
     ${who ? `<div>${v.t === 'pur' || v.t === 'pret' ? 'المورد' : v.t === 'pay' ? 'إلى' : 'العميل'}: ${esc(who)}</div>` : ''}
     ${rows ? `<table><tr><th>الصنف</th><th class="n">الكمية×السعر</th><th class="n">المبلغ</th></tr>${rows}</table>` : ''}
     ${tt.ds ? `<div class="ptot" style="font-size:12px;font-weight:400"><span>الخصم</span><span>${money(tt.ds)}</span></div>` : ''}
@@ -155,7 +155,7 @@ export function printVoucher(store, v) {
     ${v.m ? `<div style="margin-top:4px">${esc(v.m)}</div>` : ''}
     <div class="pc" style="margin-top:8px">${esc(S.foot || 'شكراً لزيارتكم')}</div>
   </div>`;
-  printHtml(html, typeName(v.t) + ' ' + (v.no || ''));
+  printHtml(html, typeName(v.t) + ' ' + (v.no || ''), 'receipt');
 }
 
 export function emptyState(text, btn) {

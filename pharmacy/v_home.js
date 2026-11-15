@@ -50,9 +50,11 @@ export function home(ctx) {
       first ? h('div', { class: 'note good' }, ctx.can('import')
         ? h('span', null, 'الدفتر فارغ. ابدأ بإدخال الأرصدة الافتتاحية من ', h('a', { href: '#/import' }, 'الاستيراد'), ' أو أضف أول فاتورة.')
         : 'الدفتر فارغ. ستظهر الحركات هنا عند أول فاتورة.') : null,
-      quick, page,
-      recent.length ? h('h3', { class: 'sect' }, 'آخر الحركات') : null,
-      recent.length ? h('section', { class: 'page tight' }, recent.map(v => voucherLine(store, v))) : null,
-      recent.length ? h('a', { class: 'btn ghost wide', href: '#/vouchers', style: { marginTop: '4px' } }, 'كل السندات') : null)
+      h('div', { class: 'homegrid' },
+        h('div', null, quick, page),
+        h('div', null,
+          recent.length ? h('h3', { class: 'sect' }, 'آخر الحركات') : null,
+          recent.length ? h('section', { class: 'page tight' }, recent.map(v => voucherLine(store, v))) : null,
+          recent.length ? h('a', { class: 'btn ghost wide', href: '#/vouchers', style: { marginTop: '4px' } }, 'كل السندات') : null)))
   };
 }

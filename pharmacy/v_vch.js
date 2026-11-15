@@ -210,5 +210,5 @@ function stockView(ctx, kind) {
       field('التاريخ', h('input', { type: 'date', value: S.d, on: { change: e => { S.d = e.target.value || today(); } } })),
       field('البيان', h('input', { value: S.m, on: { input: e => { S.m = e.target.value; } } }))));
   drawLines(); drawFoot();
-  return { title: TITLES[kind], el: body, foot };
+  return { title: TITLES[kind], el: body, foot, scanInput: input };
 }

@@ -50,7 +50,7 @@ export function docView(ctx, t) {
   async function pickParty() {
     const rows = partyRows(store, [M.pt, ...(M.pt === 'c' ? ['e', 'o'] : ['o'])]);
     const r = await picker(M.who, [{ value: '', label: M.none }, ...rows], { filter: q => q ? partyFilter(rows)(q) : [{ value: '', label: M.none }, ...rows], add: ctx.can('party-add') ? 'إضافة ' + M.who + ' جديد' : '', placeholder: 'ابحث بالاسم أو الهاتف' });
-    if (r === null) return;
+    if (r === null) { if (!D.pt && D.pay === 'credit' && isSale) { D.pay = 'cash'; change(); } return; }
     if (r && r.add) {
       const id = await store.put('parties', null, { n: r.add, t: M.pt, ph: '', act: true, at: Date.now() });
       D.pt = id;
@@ -104,10 +104,16 @@ export function docView(ctx, t) {
     }
     sugg.classList.remove('hide');
   }
-  input.addEventListener('input', showSugg);
+  input.addEventListener('input', () => { hl = -1; showSugg(); });
+  let hl = -1;
+  const mark = () => [...sugg.querySelectorAll('button')].forEach((b, i) => { b.classList.toggle('hl', i === hl); if (i === hl) b.scrollIntoView({ block: 'nearest' }); });
   input.addEventListener('keydown', e => {
+    const bs = sugg.classList.contains('hide') ? [] : [...sugg.querySelectorAll('button')];
+    if (e.key === 'ArrowDown' && bs.length) { e.preventDefault(); hl = Math.min(bs.length - 1, hl + 1); mark(); return; }
+    if (e.key === 'ArrowUp' && bs.length) { e.preventDefault(); hl = Math.max(-1, hl - 1); mark(); return; }
     if (e.key !== 'Enter') return;
     e.preventDefault();
+    if (hl >= 0 && bs[hl]) { bs[hl].click(); hl = -1; return; }
     const q = input.value.trim(); if (!q) return;
     if (/^[0-9A-Za-z\-]{5,}$/.test(q) && findBarcode(store, q)) { lookup(q); return; }
     const found = searchItems(store, q, 2);
@@ -196,7 +202,8 @@ export function docView(ctx, t) {
         D.pay === 'credit' ? h('label', { class: 'mini', style: { width: '100%' } }, 'المدفوع', pd) : null),
       h('div', { class: 'actions' },
         h('button', { class: 'btn', disabled: !n, on: { click: save } }, icon('check', 20), M.saved.replace('حُفظت', 'حفظ').replace('حُفظ', 'حفظ')),
-        n ? h('button', { class: 'btn ghost sm', style: { flex: '0 0 auto' }, on: { click: clearAll } }, 'تفريغ') : null)));
+        n ? h('button', { class: 'btn ghost sm', style: { flex: '0 0 auto' }, on: { click: clearAll } }, 'تفريغ') : null),
+      h('p', { class: 'keys' }, 'F9 حفظ، F4 ' + M.who + '، F8 نقداً أو آجل، F2 فاتورة بيع جديدة، Esc مسح البحث، والأسهم للتنقل في نتائج البحث.')));
     ds.style.width = '100%'; pd.style.width = '100%';
   }
   async function clearAll() { if (await confirmBox('تفريغ الفاتورة', 'تُحذف كل السطور من هذه المسودة.', 'تفريغ', true)) { drafts[t] = D = fresh(t); change(); } }
@@ -241,7 +248,9 @@ export function docView(ctx, t) {
     sugg, lines, extra);
   return {
     title: M.title, sub: D.ln.length ? 'مسودة محفوظة' : '', el, foot,
-    onShow: () => { if (!isBuy) setTimeout(() => input.focus(), 60); }
+    keys: { F4: pickParty, F8: () => { D.pay = D.pay === 'cash' ? 'credit' : 'cash'; if (D.pay === 'credit' && !D.pt) pickParty(); change(); } },
+    scanInput: input,
+    onShow: () => { if (!isBuy || matchMedia('(min-width: 1000px)').matches) setTimeout(() => input.focus(), 60); }
   };
 }
 

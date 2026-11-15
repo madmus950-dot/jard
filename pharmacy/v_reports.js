@@ -38,7 +38,7 @@ function fmt(v, c) { if (v === '' || v == null) return ''; if (c.n === 'q') retu
 
 function frame(ctx, k, title, opts, content) {
   const exportX = async () => {
-    try { await saveXlsx(title.replace(/\s+/g, '_') + '_' + today() + '.xlsx', opts.sheets()); toast('حُفظ الملف'); }
+    try { const r = await saveXlsx(title.replace(/\s+/g, '_') + '_' + today() + '.xlsx', opts.sheets()); if (r === 'download') toast('حُفظ الملف'); }
     catch (e) { toast('تعذّر الحفظ: ' + (e.message || e), { bad: true }); }
   };
   const printIt = () => {

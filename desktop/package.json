@@ -1,0 +1,35 @@
+{
+  "name": "pharmacy-desktop",
+  "productName": "PharmacyAccounts",
+  "version": "1.0.0",
+  "description": "حسابات الصيدلية لويندوز",
+  "main": "main.js",
+  "author": "madmus950-dot",
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.madmus950.pharmacy.desktop",
+    "productName": "PharmacyAccounts",
+    "copyright": "madmus950-dot",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "icon.png", "www/**/*", "package.json"],
+    "win": {
+      "target": [{ "target": "nsis" }],
+      "icon": "build/icon.ico",
+      "artifactName": "pharmacy-setup-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "حسابات الصيدلية",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

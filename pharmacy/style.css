@@ -106,6 +106,7 @@ input.num { text-align: left; }
 .sugg { background: var(--sheet); border: 1px solid var(--rule2); border-radius: var(--r); margin: -4px 0 10px; overflow: hidden; }
 .sugg button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; text-align: right; padding: 11px 12px; border: 0; border-bottom: 1px solid var(--rule); background: none; }
 .sugg button:last-child { border-bottom: 0; }
+.sugg button.hl { background: var(--green-t); }
 .sugg small { display: block; }
 .line { padding: 12px 0; border-bottom: 1px solid var(--rule); }
 .line:last-child { border-bottom: 0; }
@@ -126,6 +127,7 @@ input.num { text-align: left; }
 .tot .big { font-size: 28px; font-weight: 700; }
 .tot small { font-size: 13px; }
 .foot .actions { margin-top: 0; }
+.keys { display: none; }
 
 /* ---------- كشف الحساب ---------- */
 .stmt { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -184,7 +186,41 @@ input.num { text-align: left; }
   #print td, #print th { padding: 2px 0; border-bottom: 1px dashed #999; text-align: right; font-size: 11.5px; }
   #print td.n, #print th.n { text-align: left; }
   #print .ptot { font-size: 14px; font-weight: 700; display: flex; justify-content: space-between; margin-top: 6px; }
-  @page { margin: 6mm; }
+  #print.receipt { width: auto; }
+  @page { margin: 4mm; }
 }
 @media (prefers-reduced-motion: reduce) { .sheet, .sheetwrap, .toast { transition: none; } }
 @media (min-width: 700px) { main { padding: 20px 14px; } }
+
+/* ---------- الكمبيوتر: شريط تنقل جانبي، ولوحة الإجمالي ثابتة بجانب الفاتورة ---------- */
+@media (min-width: 1000px) {
+  :root { --rail: 96px; --panel: 370px; }
+  body { font-size: 16.5px; }
+  #app, #app.form { max-width: none; margin: 0; padding: 0 var(--rail) 28px 0; }
+  #app.form { padding-left: var(--panel); }
+  .bar { padding: 8px 28px; }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px 28px; }
+  #app.form main { max-width: 1180px; }
+  .nav { top: 0; bottom: 0; left: auto; right: 0; width: var(--rail); height: auto; border-top: 0; border-left: 1px solid var(--rule2); padding: 14px 0 0; }
+  .nav > div { flex-direction: column; gap: 4px; }
+  .nav button { flex: 0 0 auto; height: 76px; font-size: 13px; }
+  .nav button.sell .ic { margin: 0 0 2px; width: 48px; height: 48px; box-shadow: none; border-width: 0; }
+  .foot { top: 0; bottom: 0; left: 0; right: auto; width: var(--panel); border-top: 0; border-right: 1.5px solid var(--rule2); padding: 24px 22px; display: flex; }
+  .foot > div { display: flex; flex-direction: column; width: 100%; max-width: none; }
+  .foot .tot { flex-direction: column; align-items: stretch; gap: 6px; padding-bottom: 14px; border-bottom: 1.5px solid var(--rule2); margin-bottom: 16px; }
+  .foot .tot .big { font-size: 46px; text-align: left; }
+  .foot .row2 { grid-template-columns: 1fr; }
+  .foot .actions { margin-top: auto; flex-direction: column; }
+  .foot .actions .btn { min-height: 58px; font-size: 18px; flex: 0 0 auto; }
+  .keys { display: block; margin: 14px 0 0; font-size: 12.5px; color: var(--ink2); line-height: 1.7; }
+  .line { display: grid; grid-template-columns: minmax(240px, 1fr) auto; column-gap: 20px; align-items: center; }
+  .line .top { grid-column: 1; grid-row: 1; }
+  .line .info { grid-column: 1; grid-row: 2; }
+  .line .ctl { grid-column: 2; grid-row: 1 / span 2; margin-top: 0; flex-wrap: nowrap; }
+  .homegrid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+  .homegrid .sect { margin-top: 0; }
+  .toast, #app.form ~ .toast { bottom: 26px; }
+  .sheetwrap { align-items: center; }
+  .sheet { border-radius: 14px; max-height: 80vh; max-width: 560px; }
+  .sheet.tall { height: 80vh; }
+}

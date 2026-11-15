@@ -7,3 +7,6 @@ android/app/src/jard/assets/www/
 android/app/src/pharmacy/assets/www/
 pharmacy/demo/
 pharmacy/test/out/
+desktop/www/
+desktop/dist/
+desktop/node_modules/

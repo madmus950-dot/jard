@@ -10,6 +10,7 @@ on:
       - config.js
       - pharmacy/**
       - android/**
+      - desktop/**
       - .github/workflows/android.yml
   workflow_dispatch:
 
@@ -46,6 +47,12 @@ jobs:
           cat ph.log
           (cd android/app/src/jard/assets && zip -qr "$GITHUB_WORKSPACE/web-assets.zip" www)
           (cd android/app/src/pharmacy/assets && zip -qr "$GITHUB_WORKSPACE/pharmacy-assets.zip" www)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pharmacy-www
+          path: android/app/src/pharmacy/assets/www
+          retention-days: 3
 
       - uses: actions/setup-java@v4
         with:
@@ -86,3 +93,45 @@ jobs:
           else
             gh release create "v$V" $FILES --title "تطبيقات الصيدلية $V" --notes "$NOTES" --latest
           fi
+
+  windows:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: pharmacy-www
+          path: desktop/www
+
+      - name: Build Windows installers
+        working-directory: desktop
+        run: |
+          report() {
+            cat "$1"
+            tail -n 40 "$1" | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'NF' > tail.txt
+            split -l 10 tail.txt chunk_
+            for f in chunk_*; do echo "::error title=$2::$(sed ':a;N;$!ba;s/\n/%0A/g' "$f")"; done
+          }
+          ls www | head -40
+          npm version "1.0.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+          if ! npm install --no-audit --no-fund > npm.log 2>&1; then report npm.log npm; exit 1; fi
+          if ! npx electron-builder --win nsis --x64 --publish never > b64.log 2>&1; then report b64.log win-x64; exit 1; fi
+          if ! npx electron-builder --win nsis --ia32 --publish never > b32.log 2>&1; then report b32.log win-ia32; exit 1; fi
+          ls -la dist
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="1.0.${{ github.run_number }}"
+          gh release upload "v$V" desktop/dist/pharmacy-setup-x64.exe desktop/dist/pharmacy-setup-ia32.exe --clobber
