@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>جرد الصيدلية</title>
 <meta name="robots" content="noindex,nofollow">
+<script>/* إن تعطّل التشغيل قبل الدخول اعرض السبب بدل صفحة فارغة */
+window.addEventListener('error', function(e){ try {
+  if (document.body && document.body.classList.contains('ready')) return;
+  var t = document.getElementById('loginText'); if (!t) return;
+  var src = e && e.target && e.target.src;
+  t.hidden = false;
+  t.textContent = src ? 'تعذّر تحميل ملف من الإنترنت (' + src.split('/').pop() + '). تأكد من الاتصال ثم أعد الفتح.'
+    : 'تعذّر التشغيل: ' + ((e && e.message) || 'خطأ') + '. حدّث «Android System WebView» و«Chrome» من متجر Play ثم أعد الفتح.';
+} catch (x) {} }, true);</script>
 <style>
 /* Layout idea: one narrow column built for a phone at the shelf: store switch, three tabs, big touch fields. */
 :root{
@@ -1456,6 +1465,7 @@ showForm(); renderCols(); render(); setStatus(); connect(); renderAdmin();
 
 };
 </script>
+<script nomodule>document.getElementById('loginText').textContent = 'هذا المتصفح قديم ولا يشغّل التطبيق. حدّث «Android System WebView» و«Chrome» من متجر Play ثم أعد الفتح.';</script>
 <script src="config.js"></script>
 <script type="module" src="boot.js"></script>
 </body>

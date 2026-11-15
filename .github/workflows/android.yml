@@ -1,0 +1,81 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - boot.js
+      - fbsdk.js
+      - config.js
+      - android/**
+      - .github/workflows/android.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Web assets (local Firebase + ZXing)
+        run: |
+          set -o pipefail
+          if ! bash android/build-web.sh > web.log 2>&1; then
+            cat web.log
+            tail -n 40 web.log | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'NF' > tail.txt
+            split -l 10 tail.txt chunk_
+            for f in chunk_*; do echo "::error title=web assets::$(sed ':a;N;$!ba;s/\n/%0A/g' "$f")"; done
+            exit 1
+          fi
+          cat web.log
+          (cd android/app/src/main/assets && zip -qr "$GITHUB_WORKSPACE/web-assets.zip" www)
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          if ! gradle --no-daemon --console=plain assembleRelease > build.log 2>&1; then
+            cat build.log
+            { grep -E "error:|What went wrong|Could not|FAILURE|> " build.log | head -n 30; tail -n 30 build.log; } \
+              | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'NF' | head -n 60 > tail.txt
+            split -l 10 tail.txt chunk_
+            for f in chunk_*; do echo "::error title=gradle::$(sed ':a;N;$!ba;s/\n/%0A/g' "$f")"; done
+            exit 1
+          fi
+          tail -n 20 build.log
+          ls -la app/build/outputs/apk/release/
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="1.0.${{ github.run_number }}"
+          cp android/app/build/outputs/apk/release/app-release.apk "jard-$V.apk"
+          cp "jard-$V.apk" jard.apk
+          NOTES="تطبيق جرد الصيدلية لأندرويد — نسخة $V. ثبّت الملف jard.apk فوق النسخة السابقة مباشرة (لا حاجة لحذفها)."
+          if gh release view "v$V" >/dev/null 2>&1; then
+            gh release upload "v$V" "jard-$V.apk" jard.apk web-assets.zip --clobber
+          else
+            gh release create "v$V" "jard-$V.apk" jard.apk web-assets.zip --title "جرد الصيدلية $V" --notes "$NOTES" --latest
+          fi

@@ -1,13 +1,14 @@
 /* طبقة الاتصال بـ Firebase (Auth + Firestore). كل ما يخص Firebase في هذا الملف فقط. */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAuth, signInWithEmailAndPassword, signOut as fbSignOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, signInWithEmailAndPassword, signOut as fbSignOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, setDoc, deleteDoc, onSnapshot, getDoc, getDocs, writeBatch } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 let app = null, auth = null, fs = null;
 
 export async function init(cfg){
   app = initializeApp(cfg);
-  auth = getAuth(app);
+  // دخول بالبريد وكلمة المرور فقط: بلا نوافذ Google المنبثقة، فلا يُحمَّل شيء من firebaseapp.com أو apis.google.com
+  auth = initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] });
   fs = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     ignoreUndefinedProperties: true

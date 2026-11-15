@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.application'
+}
+
+// رقم البناء من GitHub Actions: كل نسخة أعلى من التي قبلها فتُثبَّت فوقها دون حذف
+def build = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+
+android {
+    namespace 'com.madmus950.jard'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.madmus950.jard'
+        minSdk 21
+        targetSdk 34
+        versionCode build
+        versionName "1.0.${build}"
+    }
+
+    signingConfigs {
+        release {
+            storeFile rootProject.file('jard-release.p12')
+            storeType 'pkcs12'
+            storePassword 'jard-pharmacy-2026'
+            keyAlias 'jard'
+            keyPassword 'jard-pharmacy-2026'
+            enableV1Signing true
+            enableV2Signing true
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
