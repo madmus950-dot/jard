@@ -216,7 +216,7 @@ export function importView(ctx) {
           const parties = pkg.parties.map(p => ({ id: p.id, data: Object.assign({}, store.parties.get(p.id) || {}, { id: p.id, n: p.n, t: p.t, ph: p.ph || '', act: true, at: Date.now() }) }));
           await be.putMany('parties', parties, (a, b) => { status.textContent = 'الأسماء ' + a + ' من ' + b; });
           status.textContent = 'تم: ' + items.length + ' صنف و' + parties.length + ' اسم.';
-        } catch (x) { status.textContent = 'تعذّر: ' + (x.code || x.message); }
+        } catch (x) { status.textContent = x.code === 'permission-denied' ? 'Firebase رفض الكتابة: انشر قواعد Firestore الجديدة أولاً ثم أعد المحاولة.' : 'تعذّر: ' + (x.code || x.message); }
         e.target.disabled = false;
       } } }, 'رفع الأصناف والأسماء'), status,
       h('h3', { class: 'sect' }, '2. القيد الافتتاحي'),

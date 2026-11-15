@@ -44,9 +44,13 @@ export function home(ctx) {
 
   const recent = [...store.vouchers.values()].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 8);
   const first = !store.vouchers.size;
+  const denied = store.status.error === 'permission-denied';
   return {
     title: 'اليوم', live: true,
     el: h('div', null,
+      denied ? h('div', { class: 'note bad' }, ctx.can('settings')
+        ? 'Firebase يرفض الوصول إلى بيانات الحسابات. انشر قواعد Firestore الجديدة (ملف firestore.rules) من لوحة Firebase، وسيتصل التطبيق وحده خلال دقيقة.'
+        : 'لا صلاحية على بيانات الحسابات. اطلب من المشرف تفعيل حسابك.') : null,
       first ? h('div', { class: 'note good' }, ctx.can('import')
         ? h('span', null, 'الدفتر فارغ. ابدأ بإدخال الأرصدة الافتتاحية من ', h('a', { href: '#/import' }, 'الاستيراد'), ' أو أضف أول فاتورة.')
         : 'الدفتر فارغ. ستظهر الحركات هنا عند أول فاتورة.') : null,

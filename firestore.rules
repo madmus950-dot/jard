@@ -7,14 +7,9 @@ service cloud.firestore {
     function isStaff() { return signedIn() && exists(staffPath()) && get(staffPath()).data.active == true; }
     function isAdmin() { return isStaff() && get(staffPath()).data.role == 'admin'; }
     function myName() { return get(staffPath()).data.name; }
-
-    // ---------- الحسابات: الصلاحية من الحقل acc (admin أو cashier)، ومشرف الجرد مشرف هنا أيضاً ----------
-    function accRole() {
-      let s = get(staffPath()).data;
-      return s.get('acc', s.role == 'admin' ? 'admin' : '');
-    }
-    function accStaff() { return isStaff() && accRole() in ['admin', 'cashier']; }
-    function accAdmin() { return isStaff() && accRole() == 'admin'; }
+    function staffData() { return get(staffPath()).data; }
+    function accAdmin() { return isStaff() && (staffData().get('acc', '') == 'admin' || (staffData().role == 'admin' && staffData().get('acc', '') == '')); }
+    function accStaff() { return accAdmin() || (isStaff() && staffData().get('acc', '') == 'cashier'); }
     function stamped() { return request.resource.data.u_ == request.time; }
 
     function sessionOpen() {
@@ -35,12 +30,9 @@ service cloud.firestore {
 
     match /staff/{email} {
       allow read: if signedIn() && (request.auth.token.email == email || isAdmin());
-      // المشرف يحدد صلاحية الحسابات للموظفين من داخل التطبيق
       allow update: if isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['acc']);
       allow create, delete: if false;
     }
-
-    // ---------- تطبيق الجرد ----------
     match /catalog/{part} {
       allow read: if isStaff();
       allow write: if isAdmin();
@@ -60,9 +52,6 @@ service cloud.firestore {
       allow read: if isStaff();
       allow write: if isAdmin();
     }
-
-    // ---------- تطبيق الحسابات ----------
-    // السندات لا تُحذف ولا تُعدَّل: الإلغاء فقط (للمشرف)، ويبقى السند في السجل
     match /acc_v/{id} {
       allow read: if accStaff();
       allow create: if accStaff() && stamped()
@@ -93,7 +82,5 @@ service cloud.firestore {
       allow read: if accStaff();
       allow write: if stamped() && (accAdmin() || (accStaff() && id.matches('dev_.*')));
     }
-
-    // أي شيء آخر ممنوع
   }
 }

@@ -58,14 +58,18 @@ export class Store {
   }
 
   listen() {
-    for (const u of this.unsub) try { u(); } catch (e) {}
-    this.unsub = [];
-    for (const c of COLS) {
-      const since = Math.max(0, (this.marks[c] || 0) - 120000);   // هامش دقيقتين لأمان التوقيت
-      this.unsub.push(this.be.listen(c, since, (docs, fromServer) => this.receive(c, docs, fromServer), err => {
-        this.status.error = (err && (err.code || err.message)) || 'sync'; this.emit();
-      }));
-    }
+    for (const u of Object.values(this.unsub)) try { u(); } catch (e) {}
+    this.unsub = {};
+    for (const c of COLS) this.listenOne(c);
+  }
+  /** متابعة مجموعة واحدة. إن توقفت بخطأ (لا صلاحية، انقطاع) تُعاد بعد قليل تلقائياً */
+  listenOne(c, wait) {
+    const since = Math.max(0, (this.marks[c] || 0) - 120000);   // هامش دقيقتين لأمان التوقيت
+    this.unsub[c] = this.be.listen(c, since, (docs, fromServer) => this.receive(c, docs, fromServer), err => {
+      this.status.error = (err && (err.code || err.message)) || 'sync'; this.emit();
+      const next = Math.min(120000, (wait || 10000) * 1.5);
+      setTimeout(() => this.listenOne(c, next), wait || 10000);
+    });
   }
 
   receive(c, docs, fromServer) {
@@ -77,7 +81,7 @@ export class Store {
       this.data[c].set(d.id, data); puts.push([c + '/' + d.id, data]); changed = true;
       if (d.u > mark) mark = d.u;
     }
-    if (fromServer) { this.status.synced[c] = Date.now(); this.status.error = ''; }
+    if (fromServer) { this.status.synced[c] = Date.now(); if (this.status.error !== 'write') this.status.error = ''; }
     if (mark > (this.marks[c] || 0)) this.marks[c] = mark;
     if (fromServer && !this.status.ready && COLS.every(x => this.status.synced[x])) this.status.ready = true;
     if (puts.length) this.persist(puts);
