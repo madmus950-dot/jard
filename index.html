@@ -128,6 +128,21 @@ details summary{cursor:pointer;font-weight:600;padding:6px 0;min-height:40px}
 .badge{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:var(--bad);color:#fff;font-size:12px;margin-inline-start:4px;line-height:20px}
 .confirm{display:flex;gap:8px;align-items:flex-start;margin-top:8px;font-size:15px}
 .cand{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-bottom:1px solid var(--line)}
+/* الكاميرا المدمجة: تبقى مفتوحة فوق النموذج، تقرأ صنفاً ثم التالي بعد الحفظ */
+.camstrip{position:relative;height:32vh;min-height:200px;max-height:300px;margin-top:10px;border-radius:12px;overflow:hidden;background:#000;transition:box-shadow .15s}
+.camstrip video{width:100%;height:100%;object-fit:cover;display:block}
+.camstrip .frame{position:absolute;left:12%;right:12%;top:20%;bottom:30%;border:2.5px solid #fff;border-radius:12px;box-shadow:0 0 0 100vmax rgba(0,0,0,.28)}
+.camstrip .frame::after{content:'';position:absolute;left:6%;right:6%;top:50%;border-top:2px solid #e2554b}
+.camstrip .ctop{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;padding:8px}
+.camstrip .ctop button{width:42px;height:42px;border:0;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;font-size:20px;cursor:pointer}
+.camstrip .chint{position:absolute;bottom:0;left:0;right:0;padding:8px 12px;color:#fff;font-size:14px;text-align:center;background:linear-gradient(transparent,rgba(0,0,0,.65))}
+.camstrip.hit{box-shadow:0 0 0 4px var(--brand)}
+.camstrip.wait .frame{border-color:#f2b45a}
+.camBtn[aria-pressed="true"]{background:var(--brand);color:var(--on-brand)}
+.linkbox{margin-top:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px}
+.linkbox[hidden]{display:none}
+.linkbox .sug{margin-top:0}
+.linkbox .actions{margin-top:0}
 .cand:last-child{border-bottom:0}
 .cand .nm{direction:ltr;text-align:right;unicode-bidi:plaintext;font-weight:600}
 .sec{display:flex;flex-direction:column;gap:10px}
@@ -199,9 +214,11 @@ body:not(.ready) .wrap{display:none}
           <button type="button" class="btn camBtn" id="camBtn" aria-label="مسح الباركود بالكاميرا" title="مسح الباركود بالكاميرا"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M11 8v8M15 8v8M18 8v8"/></svg></button>
         </div>
         <input id="cam" type="file" accept="image/*" capture="environment" hidden>
-        <div class="hint">زر الكاميرا يفتح كاميرا الجوال: صوّر الباركود وحده وسيُقرأ تلقائياً.</div>
+        <div id="camHost"></div>
+        <div class="hint">زر الكاميرا يفتحها هنا داخل الصفحة: وجّهها إلى الباركود أو الرمز المربع فيُفتح الصنف، احفظ العدّ ثم وجّهها إلى التالي.</div>
       </div>
       <div class="sug" id="sug" hidden></div>
+      <div class="linkbox card2" id="linkBox" hidden></div>
 
       <div id="idle" class="idle">ابدأ بمسح باركود أو بالبحث عن صنف في قاعدة الأصناف.</div>
 
@@ -569,10 +586,51 @@ function search(q){
   res.sort((a, b) => a[0] - b[0] || a[1].n.localeCompare(b[1].n));
   return res.slice(0, 15).map(x => x[1]);
 }
+/* يقرأ أي رمز: باركود خطي، أو مربع (QR/DataMatrix)، أو رمز GS1 الدوائي (01)رقم الصنف(17)الانتهاء(10)التشغيلة */
+function parseCode(raw){
+  const s = String(raw == null ? '' : raw).trim().replace(/^\][A-Za-z]\d/, '');
+  const out = {raw: s, codes: [], exp: '', batch: '', main: ''};
+  const add = c => { c = String(c || '').replace(/\x1d/g, '').trim(); if (c && !out.codes.includes(c)) out.codes.push(c); };
+  const g = s.replace(/\((\d{2,4})\)/g, '\x1d$1').replace(/^\x1d/, '');
+  if (/^01\d{14}/.test(g)) {
+    const FIX = {'01': 14, '02': 14, '11': 6, '12': 6, '13': 6, '15': 6, '16': 6, '17': 6, '20': 2};
+    let i = 0;
+    while (i < g.length) {
+      if (g[i] === '\x1d') { i++; continue; }
+      const ai = g.slice(i, i + 2);
+      if (FIX[ai]) {
+        const v = g.slice(i + 2, i + 2 + FIX[ai]); i += 2 + FIX[ai];
+        if (ai === '01') { add(v.replace(/^0/, '')); add(v); if (/^00/.test(v)) add(v.slice(2)); }
+        if (ai === '17' && /^\d{6}$/.test(v) && +v.slice(2, 4) >= 1 && +v.slice(2, 4) <= 12) out.exp = v.slice(2, 4) + '/20' + v.slice(0, 2);
+        continue;
+      }
+      const vai = /^(10|21|22|30|37|9\d)$/.test(ai) ? ai : /^(24\d|25\d|71\d)$/.test(g.slice(i, i + 3)) ? g.slice(i, i + 3) : '';
+      if (!vai) break;
+      let j = g.indexOf('\x1d', i + vai.length); if (j < 0) j = g.length;
+      if (vai === '10') out.batch = g.slice(i + 2, j);
+      i = j;
+    }
+  }
+  add(s);
+  if (/^\d{13}$/.test(s)) add('0' + s);
+  if (/^\d{12}$/.test(s)) add('0' + s);
+  if (/^0\d{13}$/.test(s)) add(s.slice(1));
+  out.main = out.codes[0] || '';
+  return out;
+}
+/* باركود رُبط بصنف من القاعدة: يُحفظ على الجهاز، ومع العدّ (حقل lb) فتعرفه كل الأجهزة */
+function localLinks(){ return lsGet('jard.links') || {}; }
+function linkedItem(codes){
+  const loc = localLinks();
+  for (const c of codes) if (loc[c] && byId.get(loc[c])) return byId.get(loc[c]);
+  let best = null;
+  for (const e of S.entries.values()) if (!e.vd && !e.nw && e.lb && codes.includes(e.lb) && (!best || (e.ts || 0) > (best.ts || 0))) best = e;
+  return best ? byId.get(best.iid) || null : null;
+}
 function lookup(raw){
-  let it = byBc.get(raw) || byId.get(raw) || byId.get(raw.toUpperCase()) || byBcNorm.get(raw.replace(/^0+/, '')) || null;
-  if (!it) { const g = /^01(\d{14})/.exec(raw); if (g) it = byBc.get(g[1]) || byBcNorm.get(g[1].replace(/^0+/, '')) || null; }   // باركود GS1 مطبوع على العبوة
-  return it;
+  const p = parseCode(raw);
+  for (const c of p.codes) { const it = byBc.get(c) || byBcNorm.get(c.replace(/^0+/, '')); if (it) return it; }
+  return byId.get(raw) || byId.get(raw.toUpperCase()) || linkedItem(p.codes);
 }
 /* أصناف أضافها المستخدمون (من أي جهاز) وتُحفظ ضمن الجرد: تُستعمل للتعرف على الباركود لاحقاً */
 function lookupAdded(raw){
@@ -652,7 +710,7 @@ function currentDraft(){
   const sel = S.sel;
   if (!sel) return null;
   if (sel.nw) return {st: S.store, nw: true, iid: '', nid: sel.nid || '', bc: latin($('#nBc').value).trim(), n: $('#nName').value.trim(), u: $('#nUnit').value.trim(), co: $('#nCo').value.trim(), ex};
-  return {st: S.store, nw: false, iid: sel.it.i, bc: sel.it.b || '', n: sel.it.n, u: sel.it.u, co: sel.it.c || '', ex};
+  return {st: S.store, nw: false, iid: sel.it.i, bc: sel.it.b || sel.lb || '', lb: sel.lb || '', n: sel.it.n, u: sel.it.u, co: sel.it.c || '', ex};
 }
 function findExisting(d){          // only MY earlier record: a colleague's count is never overwritten or added to
   if (!d || d.ex === false) return null;
@@ -682,7 +740,7 @@ function showForm(){
   } else {
     const it = sel.it;
     const other = !it.s ? '<span class="pill new">من قاعدة الأصناف · خارج قوائم الجرد</span>' : !(it.s & S.store) ? '<span class="pill new">من قائمة المخزن الآخر</span>' : '';
-    $('#selHead').innerHTML = '<div class="sel-name">' + esc(it.n) + '</div><div class="meta">' + other + 'رقم ' + esc(it.i) + (it.b ? ' · باركود ' + esc(it.b) : ' · بلا باركود') + (it.c ? ' · ' + esc(it.c) : '') + '</div>';
+    $('#selHead').innerHTML = '<div class="sel-name">' + esc(it.n) + '</div><div class="meta">' + other + 'رقم ' + esc(it.i) + (it.b ? ' · باركود ' + esc(it.b) : sel.lb ? ' · باركود مربوط ' + esc(sel.lb) : ' · بلا باركود') + (it.c ? ' · ' + esc(it.c) : '') + '</div>';
     $('#qtyLabel').textContent = 'الكمية بالـ' + esc(it.u || 'وحدة');
     renderChips();
   }
@@ -726,10 +784,10 @@ function refreshDraftInfo(){
   $('#othBox').innerHTML = ob;
   renderChips();
 }
-function pick(it){
-  S.sel = {it}; S.editing = null;
-  $('#scan').value = ''; $('#sug').hidden = true;
-  $('#qty').value = ''; $('#exp').value = '';
+function pick(it, exp, lb){
+  S.sel = {it, lb: lb || ''}; S.editing = null;
+  $('#scan').value = ''; $('#sug').hidden = true; $('#linkBox').hidden = true;
+  $('#qty').value = ''; $('#exp').value = exp || '';   // الرمز الدوائي المربع يحمل تاريخ الانتهاء
   $('#saveBtn').textContent = 'حفظ';
   $('#formMsg').innerHTML = '';
   showForm();
@@ -738,7 +796,7 @@ function pick(it){
 function openNew(bc, pre){
   pre = pre || {};
   S.sel = {nw: true, nid: pre.nid || ''}; S.editing = null; S.nConfirm = false;
-  $('#scan').value = ''; $('#sug').hidden = true;
+  $('#scan').value = ''; $('#sug').hidden = true; $('#linkBox').hidden = true;
   $('#nName').value = pre.n || ''; $('#nBc').value = bc || ''; $('#nUnit').value = pre.u || ''; $('#nCo').value = pre.co || '';
   $('#qty').value = ''; $('#exp').value = '';
   $('#saveBtn').textContent = 'حفظ';
@@ -809,12 +867,13 @@ function save(){
     const mode = (document.querySelector('input[name=dup]:checked') || {}).value || 'add';
     if (ex2) {
       const old = ex2.q;
-      e = ex2; e.q = mode === 'add' ? Math.round((old + q) * 1000) / 1000 : q; e.ts = now; e.by = S.who || e.by || ''; if (!e.dv) e.dv = DV; if (!e.ct) e.ct = e.ts; if (UID) e.uid = UID;
+      e = ex2; if (d.lb && !e.lb) e.lb = d.lb; e.q = mode === 'add' ? Math.round((old + q) * 1000) / 1000 : q; e.ts = now; e.by = S.who || e.by || ''; if (!e.dv) e.dv = DV; if (!e.ct) e.ct = e.ts; if (UID) e.uid = UID;
       addLog(e, mode === 'add' ? 'addqty' : 'replace', {p: old, q: e.q});
       label = mode === 'add' ? 'أُضيفت إلى كميتك، المجموع ' + e.q : 'استُبدلت كميتك';
     } else {
       e = {id: now.toString(36) + '-' + Math.random().toString(36).slice(2, 7), st: d.st, iid: d.iid, nid: d.nw ? (d.nid || newNid()) : '', bc: d.bc, n: d.n, u: d.u, co: d.co || '', q, ex, nw: d.nw, by: S.who, dv: DV, ct: now, ts: now, log: [{t: now, by: S.who, a: 'add', q}]};
       if (UID) e.uid = UID;
+      if (d.lb) e.lb = d.lb;
       if (!e.nw) delete e.nid;
       S.entries.set(e.id, e);
     }
@@ -938,6 +997,7 @@ function render(){
 }
 function setTab(t){
   if (IS_COUNTER && (t === 'review' || t === 'export')) t = 'entry';
+  if (t !== 'entry' && window.__camStop) window.__camStop();
   S.tab = t;
   [['entry', 'pEntry', 'tabEntry'], ['list', 'pList', 'tabList'], ['review', 'pReview', 'tabReview'], ['export', 'pExport', 'tabExport']].forEach(([k, p, b]) => {
     $('#' + p).hidden = k !== t; $('#' + b).setAttribute('aria-selected', k === t);
@@ -1251,9 +1311,16 @@ function renderDbInfo(){
   const withBc = CATALOG.filter(it => it.b).length, add = addedItems().length;
   $('#dbSummary').textContent = CATALOG.length.toLocaleString('en') + ' صنف، منها ' + withBc.toLocaleString('en') + ' بباركود' + (add ? ' ، و' + add + ' صنف جديد أضفته' : '') + '.';
 }
+/* الباركودات التي رُبطت بأصناف القاعدة أثناء الجرد (من كل الأجهزة ومن هذا الجهاز) */
+function linkedCodes(){
+  const m = new Map(), add = (iid, c) => { if (!iid || !c) return; if (!m.has(iid)) m.set(iid, new Set()); m.get(iid).add(c); };
+  S.entries.forEach(e => { if (!e.vd && !e.nw && e.lb) add(e.iid, e.lb); });
+  Object.entries(localLinks()).forEach(([c, iid]) => add(iid, c));
+  return m;
+}
 function exportDb(){
-  const rows = [['رقم الصنف', 'الباركود', 'اسم الصنف', 'الشركة', 'الوحدة', 'المصدر']];
-  CATALOG.forEach(it => rows.push([it.i, it.bs.join(' / '), it.n, it.c || '', it.u || '', it.s ? 'قوائم الجرد' : 'قاعدة بيتاسيس']));
+  const rows = [['رقم الصنف', 'الباركود', 'اسم الصنف', 'الشركة', 'الوحدة', 'المصدر']], lk = linkedCodes();
+  CATALOG.forEach(it => { const extra = [...(lk.get(it.i) || [])].filter(c => !it.bs.includes(c)); rows.push([it.i, it.bs.concat(extra).join(' / '), it.n, it.c || '', it.u || '', (it.s ? 'قوائم الجرد' : 'قاعدة بيتاسيس') + (extra.length ? '، باركود رُبط في الجرد' : '')]); });
   addedItems().forEach(e => rows.push([e.nid || 'جديد', e.bc || '', e.n, e.co || '', e.u || '', 'أُضيف من التطبيق']));
   saveFile('items_database_' + today() + '.xlsx', buildXlsx([{name: 'قاعدة الأصناف', rows, widths: [14, 22, 50, 28, 12, 18]}]));
 }
@@ -1275,16 +1342,45 @@ let sugTimer;
 function submitScan(raw){
   raw = latin(raw).trim();
   if (!raw) return;
+  const pc = parseCode(raw);
   const it = lookup(raw);
-  if (it) { pick(it); return; }
-  if (/^N-[A-Za-z0-9]{5}$/.test(raw)) { const na = lookupNid(raw.toUpperCase()); if (na) { openNew(na.bc, na); return; } }
-  if (/^\d{6,}$/.test(raw)) {
-    const a = lookupAdded(raw);
-    if (a) { toast('صنف أُضيف سابقاً'); openNew(a.bc, a); return; }
-    toast('باركود غير موجود في قاعدة الأصناف'); openNew(raw); return;
+  if (it) {
+    // قُرئ عبر ربط سابق: يُحمل الربط مع العدّ أيضاً
+    const z = c => c.replace(/^0+/, ''), own = it.bs.some(b => pc.codes.some(c => c === b || z(c) === z(b)));
+    pick(it, pc.exp, !own && pc.main !== it.i && pc.main.toUpperCase() !== it.i ? pc.main : '');
+    return;
   }
-  const r = search(raw);
+  if (/^N-[A-Za-z0-9]{5}$/.test(raw)) { const na = lookupNid(raw.toUpperCase()); if (na) { openNew(na.bc, na); return; } }
+  const r = /^\d{6,}$/.test(pc.main) || pc.exp ? [] : search(raw);
+  if (/^\d{6,}$/.test(pc.main) || pc.exp || (!r.length && /^\S{6,}$/.test(raw) && /\d/.test(raw))) {
+    for (const c of pc.codes) { const a = lookupAdded(c); if (a) { toast('صنف أُضيف سابقاً'); openNew(a.bc, a); return; } }
+    linkPrompt(pc); return;   // غير مسجّل: يُربط بصنف من القاعدة أو يُضاف صنفاً جديداً
+  }
   if (r.length === 1) pick(r[0]); else showSug(r, raw);
+}
+/* ---------- ربط باركود غير مسجّل بصنف ---------- */
+function linkPrompt(pc){
+  const box = $('#linkBox'); box.hidden = false; $('#sug').hidden = true; $('#idle').hidden = true;
+  box.dataset.code = pc.main; box.dataset.exp = pc.exp || '';
+  box.innerHTML = '<div class="note warn" style="margin:0">باركود غير موجود في قاعدة الأصناف: <b class="ltr">' + esc(pc.main) + '</b><br>اكتب اسم الصنف الذي على علبته هذا الباركود لربطه به، فيُقرأ بعدها مباشرة على كل الأجهزة.</div>' +
+    '<input id="linkQ" type="search" autocomplete="off" enterkeyhint="search" placeholder="اسم الصنف أو رقمه">' +
+    '<div id="linkRes"></div>' +
+    '<div class="actions"><button type="button" class="btn small ghost" data-newbc="1">صنف جديد بهذا الباركود</button><button type="button" class="btn small ghost" data-linkx="1">إلغاء</button></div>';
+  setTimeout(() => { const q = $('#linkQ'); if (q) q.focus(); }, 60);
+}
+function linkResults(){
+  const q = $('#linkQ'); if (!q) return;
+  const list = search(q.value);
+  $('#linkRes').innerHTML = !q.value.trim() ? '' : !list.length ? '<div class="hint">لا يوجد صنف بهذا الاسم. أضفه صنفاً جديداً.</div>' :
+    '<div class="sug">' + list.map(it => '<button type="button" data-link="' + esc(it.i) + '"><span class="ltr" style="text-align:right">' + esc(it.n) + '</span><small>' + esc(it.c || it.u || '') + (it.b ? '' : ' · بلا باركود') + '</small></button>').join('') + '</div>';
+}
+function doLink(it){
+  const box = $('#linkBox'), code = box.dataset.code || '', exp = box.dataset.exp || '';
+  if (!it || !code) return;
+  box.hidden = true;
+  const loc = localLinks(); loc[code] = it.i; lsSet('jard.links', loc);
+  toast('رُبط الباركود بـ ' + it.n);
+  pick(it, exp, code);
 }
 $('#scan').addEventListener('keydown', ev => {
   if (ev.key !== 'Enter') return;
@@ -1292,7 +1388,7 @@ $('#scan').addEventListener('keydown', ev => {
   submitScan($('#scan').value);
 });
 $('#scan').addEventListener('input', () => {
-  clearTimeout(sugTimer);
+  clearTimeout(sugTimer); $('#linkBox').hidden = true;
   const raw = latin($('#scan').value).trim();
   if (raw.length < 2 || /^\d{8,}$/.test(raw)) { $('#sug').hidden = true; $('#idle').hidden = !!S.sel; return; }
   sugTimer = setTimeout(() => showSug(search(raw), raw), 140);
@@ -1304,6 +1400,16 @@ function showSug(list, raw){
   const counted = new Set(storeEntries(S.store).filter(e => !e.nw).map(e => e.iid));
   box.innerHTML = list.map(it => '<button type="button" data-pick="' + esc(it.i) + '"><span class="ltr" style="text-align:right">' + esc(it.n) + '</span><small>' + (counted.has(it.i) ? '✓ جُرد · ' : '') + esc(it.c || it.u || '') + (!it.s ? ' · من القاعدة' : it.s & S.store ? '' : ' · مخزن آخر') + '</small></button>').join('');
 }
+$('#linkBox').addEventListener('input', ev => { if (ev.target.id === 'linkQ') linkResults(); });
+$('#linkBox').addEventListener('keydown', ev => {
+  if (ev.target.id !== 'linkQ' || ev.key !== 'Enter') return;
+  ev.preventDefault(); const f = $('#linkRes [data-link]'); if (f) doLink(byId.get(f.dataset.link));
+});
+$('#linkBox').addEventListener('click', ev => {
+  const lk = ev.target.closest('[data-link]'); if (lk) { doLink(byId.get(lk.dataset.link)); return; }
+  if (ev.target.closest('[data-newbc]')) { $('#linkBox').hidden = true; openNew($('#linkBox').dataset.code || ''); return; }
+  if (ev.target.closest('[data-linkx]')) { $('#linkBox').hidden = true; $('#idle').hidden = !!S.sel; $('#scan').focus(); }
+});
 $('#sug').addEventListener('click', ev => {
   const b = ev.target.closest('[data-pick]'); if (b) { pick(byId.get(b.dataset.pick)); return; }
   if (ev.target.closest('[data-addnew]')) { const raw = $('#sug').dataset.raw || ''; openNew('', {n: /^\d+$/.test(raw) ? '' : raw}); }
@@ -1386,10 +1492,80 @@ $('#colsTbl').addEventListener('click', ev => {
   saveSettings(); renderCols();
 });
 
-/* ---------- camera: one photo per scan (live video is blocked inside this page) ---------- */
+/* ---------- الكاميرا: مدمجة في الصفحة بكل أنواع الرموز، وصورة واحدة إن تعذّر الفيديو ---------- */
 function loadZXing(){
   if (window.ZXing) return Promise.resolve();
   return new Promise((ok, no) => { const el = document.createElement('script'); el.src = 'https://unpkg.com/@zxing/library@0.21.3'; el.onload = ok; el.onerror = () => no(new Error('zxing')); document.head.appendChild(el); });
+}
+const CAM_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93', 'itf', 'codabar', 'qr_code', 'data_matrix', 'pdf417', 'aztec'];
+async function camDetector(){
+  if (!('BarcodeDetector' in window)) return null;
+  try { const sup = await BarcodeDetector.getSupportedFormats(); const f = CAM_FORMATS.filter(x => sup.includes(x)); return f.length ? new BarcodeDetector({formats: f}) : null; } catch (e) { return null; }
+}
+function camBeep(){
+  try { if (navigator.vibrate) navigator.vibrate(50); } catch (e) {}
+  try { const C = window.AudioContext || window.webkitAudioContext; if (!C) return; const a = camBeep.c || (camBeep.c = new C()), o = a.createOscillator(), g = a.createGain(); o.frequency.value = 1650; g.gain.value = 0.08; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + 0.09); } catch (e) {}
+}
+async function camDecodeLoop(video, stream, onText){
+  let stopped = false, timer = null, reader = null;
+  const det = await camDetector();
+  if (det) {
+    timer = setInterval(async () => { if (stopped || video.readyState < 2) return; try { const r = await det.detect(video); if (r && r.length && !stopped) onText(r[0].rawValue); } catch (e) {} }, 130);
+  } else {
+    await loadZXing();
+    const Z = window.ZXing, hints = new Map();
+    hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, ['EAN_13', 'EAN_8', 'UPC_A', 'UPC_E', 'CODE_128', 'CODE_39', 'CODE_93', 'ITF', 'CODABAR', 'RSS_14', 'QR_CODE', 'DATA_MATRIX', 'PDF_417', 'AZTEC'].map(k => Z.BarcodeFormat[k]).filter(v => v !== undefined));
+    reader = new Z.BrowserMultiFormatReader(hints, 120);
+    reader.decodeFromStream(stream, video, res => { if (res && !stopped) onText(res.getText()); }).catch(() => {});
+  }
+  return () => { stopped = true; clearInterval(timer); try { if (reader) reader.reset(); } catch (e) {} };
+}
+async function camStart(){
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: {ideal: 'environment'}, width: {ideal: 1280}, height: {ideal: 720}}, audio: false}); }
+  catch (e) { if (e && e.name === 'NotAllowedError') toast('اسمح للتطبيق باستخدام الكاميرا من إعدادات الجهاز'); return false; }
+  const host = $('#camHost');
+  host.innerHTML = '<div class="camstrip"><video playsinline muted autoplay></video><div class="frame"></div><div class="ctop"><button type="button" data-camx aria-label="إغلاق الكاميرا">×</button><button type="button" data-torch aria-label="الإضاءة" hidden>⚡</button></div><div class="chint">وجّه الكاميرا إلى الباركود أو الرمز المربع</div></div>';
+  const box = host.firstChild, video = box.querySelector('video'), hint = box.querySelector('.chint');
+  video.muted = true; video.srcObject = stream;
+  try { await video.play(); } catch (e) {}
+  const track = stream.getVideoTracks()[0];
+  try { if (track && track.getCapabilities && track.getCapabilities().torch) { const tb = box.querySelector('[data-torch]'); let on = false; tb.hidden = false; tb.onclick = () => { on = !on; track.applyConstraints({advanced: [{torch: on}]}).catch(() => {}); }; } } catch (e) {}
+  let stopped = false, stopDec = null, last = '', seenT = 0;
+  const onVis = () => { if (document.hidden) stop(); };
+  function stop(){
+    if (stopped) return; stopped = true;
+    if (stopDec) stopDec();
+    stream.getTracks().forEach(t => t.stop());
+    host.innerHTML = ''; $('#camBtn').setAttribute('aria-pressed', 'false');
+    document.removeEventListener('visibilitychange', onVis); window.__camStop = null;
+  }
+  window.__camStop = stop;
+  box.querySelector('[data-camx]').onclick = stop;
+  document.addEventListener('visibilitychange', onVis);
+  $('#camBtn').setAttribute('aria-pressed', 'true');
+  let wasSel = false;
+  const tick = setInterval(() => {
+    if (stopped) { clearInterval(tick); return; }
+    const sel = !!S.sel; box.classList.toggle('wait', sel);
+    if (sel && !wasSel) setTimeout(() => { if (S.sel && !stopped) hint.textContent = 'احفظ عدّ ' + (S.sel.it ? S.sel.it.n : 'الصنف') + ' أو ألغه، ثم وجّه الكاميرا إلى التالي'; }, 1200);
+    if (!sel && wasSel) hint.textContent = 'جاهز: وجّه الكاميرا إلى الصنف التالي';
+    wasSel = sel;
+  }, 300);
+  try {
+    stopDec = await camDecodeLoop(video, stream, text => {
+      const now = Date.now();
+      if (text === last && now - seenT < 1500) { seenT = now; return; }   // نفس العلبة ما زالت أمام الكاميرا
+      if (S.sel) return;                                                    // صنف مفتوح لم يُحفظ بعد
+      if (!$('#linkBox').hidden) return;                                     // ربط باركود جارٍ
+      last = text; seenT = now;
+      camBeep(); box.classList.add('hit'); setTimeout(() => box.classList.remove('hit'), 380);
+      submitScan(String(text));
+      hint.textContent = S.sel && S.sel.it ? 'فُتح: ' + S.sel.it.n : S.sel ? 'صنف أُضيف سابقاً' : 'غير مسجّل: ' + parseCode(text).main;
+    });
+    if (stopped) stopDec();
+  } catch (e) { toast('تعذّر تشغيل قارئ الباركود'); stop(); return false; }
+  return true;
 }
 async function scaledBlob(file, max){
   const bmp = await createImageBitmap(file);
@@ -1415,7 +1591,11 @@ async function decodePhoto(file){
     return res.getText();
   } finally { URL.revokeObjectURL(url); }
 }
-$('#camBtn').addEventListener('click', () => $('#cam').click());
+$('#camBtn').addEventListener('click', async () => {
+  if (window.__camStop) { window.__camStop(); return; }
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && await camStart()) return;
+  $('#cam').click();   // بلا فيديو: صورة واحدة من كاميرا الجوال
+});
 $('#cam').addEventListener('change', async ev => {
   const f = ev.target.files && ev.target.files[0]; ev.target.value = '';
   if (!f) return;
