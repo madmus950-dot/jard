@@ -83,18 +83,26 @@ export function toast(msg, opt = {}) {
 }
 
 /* ---------- نافذة سفلية ---------- */
+// إغلاق النافذة يرجع خطوة في السجل؛ النافذة التالية تنتظر اكتمال الرجوع حتى لا يغلقها هو أيضاً
+let pendingBack = null;
+function goBack() {
+  if (!pendingBack) pendingBack = new Promise(r => { let fired = false; const f = () => { if (fired) return; fired = true; removeEventListener('popstate', f); pendingBack = null; r(); }; addEventListener('popstate', f); setTimeout(f, 600); });
+  history.back();
+}
 export function sheet(title, body, opt = {}) {
+  let armed = false;
   const close = () => { wrap.classList.remove('on'); setTimeout(() => wrap.remove(), 180); removeEventListener('popstate', onPop); if (opt.onClose) opt.onClose(); };
   const onPop = () => close();
-  const wrap = h('div', { class: 'sheetwrap', on: { click: e => { if (e.target === wrap) { history.back(); } } } },
+  const shut = () => { if (armed) goBack(); else { armed = true; close(); } };
+  const wrap = h('div', { class: 'sheetwrap', on: { click: e => { if (e.target === wrap) shut(); } } },
     h('div', { class: 'sheet' + (opt.tall ? ' tall' : '') + (opt.cls ? ' ' + opt.cls : ''), role: 'dialog', 'aria-label': title },
-      h('div', { class: 'sheethead' }, h('h3', null, title), h('button', { class: 'iconbtn', 'aria-label': 'إغلاق', on: { click: () => history.back() } }, icon('x', 20))),
+      h('div', { class: 'sheethead' }, h('h3', null, title), h('button', { class: 'iconbtn', 'aria-label': 'إغلاق', on: { click: shut } }, icon('x', 20))),
       h('div', { class: 'sheetbody' }, body)));
   document.body.appendChild(wrap);
   requestAnimationFrame(() => wrap.classList.add('on'));
-  history.pushState({ sheet: 1 }, '');
-  addEventListener('popstate', onPop);
-  return { close: () => history.back(), el: wrap };
+  const arm = () => { if (armed) return; armed = true; history.pushState({ sheet: 1 }, ''); addEventListener('popstate', onPop); };
+  if (pendingBack) pendingBack.then(arm); else arm();
+  return { close: shut, el: wrap };
 }
 
 export function confirmBox(title, msg, okLabel, danger) {
@@ -123,10 +131,12 @@ export function picker(title, rows, opt = {}) {
     const draw = () => {
       const f = opt.filter ? opt.filter(q.value) : rows;
       list.textContent = '';
-      if (opt.add && q.value.trim()) list.appendChild(h('button', { class: 'prow add', on: { click: () => { done = true; res({ add: q.value.trim() }); s.close(); } } }, icon('plus', 18), h('span', null, opt.add + ': ' + q.value.trim())));
+      const addRow = () => { if (opt.add && q.value.trim()) list.appendChild(h('button', { class: 'prow add', on: { click: () => { done = true; res({ add: q.value.trim() }); s.close(); } } }, icon('plus', 18), h('span', null, opt.add + ': ' + q.value.trim()))); };
+      if (!opt.addLast) addRow();
       for (const r of f.slice(0, 80)) list.appendChild(h('button', { class: 'prow', on: { click: () => { done = true; res(r.value); s.close(); } } },
         h('span', { class: 'pmain' }, h('b', null, r.label), r.sub ? h('small', null, r.sub) : null), r.side ? h('span', { class: 'pside num' }, r.side) : null));
-      if (!f.length && !(opt.add && q.value.trim())) list.appendChild(h('p', { class: 'empty' }, opt.empty || 'لا نتائج'));
+      if (!f.length) list.appendChild(h('p', { class: 'empty' }, q.value.trim() && opt.add ? 'لا نتائج بهذا الاسم.' : (opt.empty || 'لا نتائج')));
+      if (opt.addLast) addRow();
     };
     const first = () => { const bs = [...list.querySelectorAll('button')]; return bs.findIndex(b => !b.classList.contains('add')); };
     q.addEventListener('input', () => { draw(); hl = first(); mark(); });

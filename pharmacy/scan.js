@@ -1,7 +1,9 @@
 /* قراءة الباركود: الكاميرا الحية (أسرع)، وإن تعذّرت فبصورة واحدة. يعمل أيضاً قارئ الباركود الخارجي كلوحة مفاتيح في حقل البحث. */
 import { h, icon, toast } from './ui.js';
 
-const FORMATS = ['ean_13', 'ean_8', 'code_128', 'upc_a', 'upc_e', 'code_39', 'itf', 'codabar', 'qr_code', 'data_matrix'];
+// كل أنواع الرموز: الخطية، والمربعة (QR وDataMatrix الدوائي)، وPDF417 وAztec
+const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93', 'itf', 'codabar', 'qr_code', 'data_matrix', 'pdf417', 'aztec'];
+const zfmt = Z => ['EAN_13', 'EAN_8', 'UPC_A', 'UPC_E', 'CODE_128', 'CODE_39', 'CODE_93', 'ITF', 'CODABAR', 'RSS_14', 'QR_CODE', 'DATA_MATRIX', 'PDF_417', 'AZTEC'].map(k => Z.BarcodeFormat[k]).filter(v => v !== undefined);
 let zxingP = null;
 function loadZXing() {
   if (window.ZXing) return Promise.resolve();
@@ -50,10 +52,10 @@ export async function scanCode() {
 
 /**
  * زر المسح بجانب خانة البحث.
- * الجوال: كاميرا. الكمبيوتر: أيقونة قارئ الباركود؛ القارئ يكتب في الخانة مباشرة دون ضغط الزر،
+ * الجوال: كاميرا (مدمجة في الصفحة إن مُرّر inline). الكمبيوتر: أيقونة قارئ الباركود؛ القارئ يكتب في الخانة مباشرة دون ضغط الزر،
  * والزر يفتح كاميرا اللابتوب إن وُجدت، وإلا يجهّز الخانة للمسح.
  */
-export function scanButton(onCode, input) {
+export function scanButton(onCode, input, opt = {}) {
   const desk = DESK();
   return h('button', { class: 'iconbtn', type: 'button', 'aria-label': desk ? 'قارئ الباركود' : 'مسح بالكاميرا', title: desk ? 'قارئ الباركود: امسح مباشرة، أو اضغط لاستعمال كاميرا الكمبيوتر' : '',
     on: { click: async () => {
@@ -62,61 +64,121 @@ export function scanButton(onCode, input) {
         toast('القارئ جاهز: امسح الباركود الآن');
         return;
       }
+      if (opt.inline && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) { opt.inline(); return; }
       const c = await scanCode(); if (c) onCode(c);
     } } }, icon(desk ? 'barcode' : 'camera'));
 }
 
+function openStream() {
+  return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+}
+/** يقرأ الرموز من الفيديو باستمرار ويستدعي onText لكل قراءة؛ يعيد دالة الإيقاف */
+async function decodeLoop(video, stream, onText) {
+  let stopped = false, timer = null, reader = null;
+  const det = await detector();
+  if (det) {
+    timer = setInterval(async () => {
+      if (stopped || video.readyState < 2) return;
+      try { const r = await det.detect(video); if (r && r.length && !stopped) onText(r[0].rawValue); } catch (e) {}
+    }, 130);
+  } else {
+    await loadZXing();
+    const Z = window.ZXing, hints = new Map();
+    hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, zfmt(Z));
+    reader = new Z.BrowserMultiFormatReader(hints, 120);
+    reader.decodeFromStream(stream, video, res => { if (res && !stopped) onText(res.getText()); }).catch(() => {});
+  }
+  return () => { stopped = true; clearInterval(timer); try { if (reader) reader.reset(); } catch (e) {} };
+}
+function torch(stream, btn) {
+  const track = stream.getVideoTracks()[0];
+  try {
+    if (track && track.getCapabilities && track.getCapabilities().torch) {
+      let on = false; btn.classList.remove('hide');
+      btn.onclick = () => { on = !on; track.applyConstraints({ advanced: [{ torch: on }] }).catch(() => {}); };
+    }
+  } catch (e) {}
+}
+
+/** شاشة كاميرا كاملة لقراءة رمز واحد */
 function live() {
   return new Promise(async (resolve, reject) => {
-    let stream = null, done = false, timer = null, reader = null;
+    let stream = null, done = false, stopDec = null;
     const video = h('video', { playsinline: true, muted: true, autoplay: true });
     video.setAttribute('playsinline', ''); video.muted = true;
     const torchBtn = h('button', { class: 'iconbtn hide', 'aria-label': 'الإضاءة' }, icon('bolt'));
     const ui = h('div', { class: 'cam' }, video, h('div', { class: 'frame' }),
       h('div', { class: 'camtop' }, h('button', { class: 'iconbtn', 'aria-label': 'إغلاق', on: { click: () => finish(null) } }, icon('x')), torchBtn),
-      h('div', { class: 'camhint' }, 'وجّه الكاميرا إلى الباركود'));
+      h('div', { class: 'camhint' }, 'وجّه الكاميرا إلى الباركود أو الرمز المربع'));
     const onPop = () => finish(null, true);
     function finish(code, fromPop) {
       if (done) return; done = true;
-      clearInterval(timer);
-      try { if (reader) reader.reset(); } catch (e) {}
+      if (stopDec) stopDec();
       if (stream) stream.getTracks().forEach(t => t.stop());
       ui.remove(); removeEventListener('popstate', onPop);
       if (!fromPop) history.back();
       if (code) beep();
       resolve(code);
     }
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
-    } catch (e) { reject(e); return; }
+    try { stream = await openStream(); } catch (e) { reject(e); return; }
     document.body.appendChild(ui);
     history.pushState({ cam: 1 }, ''); addEventListener('popstate', onPop);
     video.srcObject = stream;
     try { await video.play(); } catch (e) {}
-    const track = stream.getVideoTracks()[0];
-    try {
-      if (track && track.getCapabilities && track.getCapabilities().torch) {
-        let on = false; torchBtn.classList.remove('hide');
-        torchBtn.onclick = () => { on = !on; track.applyConstraints({ advanced: [{ torch: on }] }).catch(() => {}); };
-      }
-    } catch (e) {}
-    const det = await detector();
-    if (det) {
-      timer = setInterval(async () => {
-        if (done || video.readyState < 2) return;
-        try { const r = await det.detect(video); if (r && r.length) finish(r[0].rawValue); } catch (e) {}
-      }, 140);
-      return;
-    }
-    try {
-      await loadZXing();
-      const Z = window.ZXing, hints = new Map();
-      hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.ITF, Z.BarcodeFormat.QR_CODE, Z.BarcodeFormat.DATA_MATRIX]);
-      reader = new Z.BrowserMultiFormatReader(hints, 150);
-      const res = await reader.decodeOnceFromStream(stream, video);
-      finish(res && res.getText());
-    } catch (e) { if (!done) { toast('تعذّر تشغيل قارئ الباركود', { bad: true }); finish(null); } }
+    torch(stream, torchBtn);
+    try { stopDec = await decodeLoop(video, stream, t => finish(t)); if (done && stopDec) stopDec(); }
+    catch (e) { if (!done) { toast('تعذّر تشغيل قارئ الباركود', { bad: true }); finish(null); } }
   });
+}
+
+/**
+ * كاميرا مدمجة داخل الصفحة تقرأ صنفاً بعد صنف دون إغلاق.
+ * onCode(text) يعيد نصاً يظهر تحت الكاميرا (مثل اسم الصنف المضاف). تتوقف عند مغادرة الصفحة أو إخفاء التطبيق.
+ */
+export async function inlineScanner(host, onCode, onClose) {
+  let stream;
+  try { stream = await openStream(); }
+  catch (e) {
+    if (e && e.name === 'NotAllowedError') toast(DESK() ? 'اسمح للبرنامج بالكاميرا من إعدادات ويندوز: الخصوصية ← الكاميرا' : 'اسمح للتطبيق باستخدام الكاميرا من إعدادات الجهاز', { bad: true });
+    else toast('تعذّر تشغيل الكاميرا', { bad: true });
+    return null;
+  }
+  const video = h('video', { playsinline: true, muted: true, autoplay: true });
+  video.setAttribute('playsinline', ''); video.muted = true;
+  const msg = h('div', { class: 'camhint' }, 'امسح الأصناف واحداً بعد الآخر: باركود أو رمز مربع');
+  const torchBtn = h('button', { class: 'iconbtn hide', type: 'button', 'aria-label': 'الإضاءة' }, icon('bolt'));
+  let stopped = false, stopDec = null;
+  const box = h('div', { class: 'camstrip' }, video, h('div', { class: 'frame' }),
+    h('div', { class: 'camtop' }, h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'إغلاق الكاميرا', on: { click: () => stop(true) } }, icon('x')), torchBtn), msg);
+  host.textContent = ''; host.appendChild(box);
+  video.srcObject = stream;
+  try { await video.play(); } catch (e) {}
+  torch(stream, torchBtn);
+  let last = '', seenT = 0, busy = false;
+  const onVis = () => { if (document.hidden) stop(true); };
+  const onHash = () => stop(false);
+  function stop(user) {
+    if (stopped) return; stopped = true;
+    if (stopDec) stopDec();
+    stream.getTracks().forEach(t => t.stop());
+    box.remove();
+    removeEventListener('hashchange', onHash); document.removeEventListener('visibilitychange', onVis);
+    if (onClose) onClose(user);
+  }
+  addEventListener('hashchange', onHash); document.addEventListener('visibilitychange', onVis);
+  try {
+    stopDec = await decodeLoop(video, stream, text => {
+      const now = Date.now();
+      // نفس العلبة ما زالت أمام الكاميرا: لا تُضاف ثانية حتى تُبعد ثم تُعاد
+      if (text === last && now - seenT < 1500) { seenT = now; return; }
+      if (busy) return;
+      last = text; seenT = now; busy = true;
+      beep(); box.classList.add('hit'); setTimeout(() => box.classList.remove('hit'), 380);
+      Promise.resolve(onCode(text)).then(r => { if (r) msg.textContent = r; }).catch(e => console.error(e)).finally(() => { busy = false; seenT = Date.now(); });
+    });
+    if (stopped) stopDec();
+  } catch (e) { toast('تعذّر تشغيل قارئ الباركود', { bad: true }); stop(false); return null; }
+  return { stop: () => stop(true) };
 }
 
 /** بديل: صورة واحدة من الكاميرا */

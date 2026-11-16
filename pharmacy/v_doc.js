@@ -2,8 +2,8 @@
 import { h, $, icon, toast, picker, numField, confirmBox, field, put, wide } from './ui.js';
 import { money, price as fp, qty, num, today, parseExp, dmy } from './util.js';
 import { totals, check, STORES, partyBalance } from './engine.js';
-import { findBarcode, searchItems, units, stockOf, nearestExp, expTag, qtyText, cashAccounts, partyRows, partyFilter, partyName, avgCost, printVoucher, balWords } from './common.js';
-import { scanButton } from './scan.js';
+import { findBarcode, findCode, parseCode, linkBarcode, searchItems, units, stockOf, nearestExp, expTag, qtyText, cashAccounts, partyRows, partyFilter, partyName, avgCost, printVoucher, balWords } from './common.js';
+import { scanButton, inlineScanner } from './scan.js';
 
 const META = {
   sale: { title: 'فاتورة بيع', pt: 'c', who: 'العميل', none: 'زبون نقدي', price: 'p', pay: 'cash', saved: 'حُفظت فاتورة البيع' },
@@ -60,26 +60,29 @@ export function docView(ctx, t) {
   }
 
   /* ---------- إضافة صنف ---------- */
-  function addItem(it, uIdx) {
+  function addItem(it, uIdx, exp) {
     const us = units(it); uIdx = uIdx || 0;
     const u = us[uIdx] || us[0];
-    const same = D.ln.find(l => l.i === it.id && l.u === uIdx && (!isBuy || !l.x));
+    const same = D.ln.find(l => l.i === it.id && l.u === uIdx && (!isBuy || !l.x || (exp && l.x === exp)));
     if (same && isSale) { same.q = +(same.q || 0) + 1; D.ln.splice(D.ln.indexOf(same), 1); D.ln.unshift(same); }
     else {
       const l = { i: it.id, n: it.n, u: uIdx, z: u.s, q: 1, s: D.s };
       if (P === 'p') l.p = +u.p || 0;
-      else { l.c = Math.round(avgCost(store.L, store, it.id) * u.s * 100) / 100; l.f = 0; l.x = ''; }
+      else { l.c = Math.round(avgCost(store.L, store, it.id) * u.s * 100) / 100; l.f = 0; l.x = exp || ''; }   // الرمز الدوائي المربع يحمل الصلاحية
       D.ln.unshift(l);
     }
     input.value = ''; sugg.classList.add('hide');
     change();
     setTimeout(() => { const first = $('input.q', lines); if (isBuy && first) first.select(); }, 30);
   }
-  async function lookup(code) {
-    const f = findBarcode(store, code);
-    if (f && f.it) { addItem(f.it, f.u); return true; }
+  /** يعيد اسم الصنف المضاف، أو false */
+  async function lookup(raw) {
+    const f = findCode(store, raw);
+    if (f && f.it) { addItem(f.it, f.u, f.exp); return f.it.n; }
+    const pc = parseCode(raw), code = pc.main;
     // أرشيف أصناف BetaSys (من تطبيق الجرد): صنف قديم لم يُستورد بعد
-    const old = ctx.can('item-add') ? await archiveFind(ctx, code) : null;
+    let old = null;
+    if (ctx.can('item-add')) for (const c of pc.codes) { old = await archiveFind(ctx, c); if (old) break; }
     if (old) {
       toast('صنف من الأرشيف: ' + old.n, { action: { label: 'إضافة للفاتورة', fn: async () => {
         const id = await store.put('items', old.id, { n: old.n, bc: old.bc, co: old.co, u: [{ n: old.un || 'علبة', s: 1, p: 0 }], c0: 0, act: true, at: Date.now(), arc: true });
@@ -87,7 +90,9 @@ export function docView(ctx, t) {
       } } });
       return false;
     }
-    toast('الباركود ' + code + ' غير مسجّل', ctx.can('item-add') ? { bad: true, action: { label: 'إضافة صنف', fn: () => { persist(D); ctx.go('item-edit/' + encodeURIComponent('bc:' + code)); } } } : { bad: true });
+    // غير مسجّل: يُربط بصنف موجود (يُحفظ ويُقرأ بعدها مباشرة) أو يُضاف صنف جديد به
+    const L = await linkBarcode(ctx, raw, { onNew: () => persist(D) });
+    if (L) { addItem(L.it, L.u, L.exp); return L.it.n; }
     return false;
   }
   function showSugg() {
@@ -115,10 +120,10 @@ export function docView(ctx, t) {
     e.preventDefault();
     if (hl >= 0 && bs[hl]) { bs[hl].click(); hl = -1; return; }
     const q = input.value.trim(); if (!q) return;
-    if (/^[0-9A-Za-z\-]{5,}$/.test(q) && findBarcode(store, q)) { lookup(q); return; }
+    if (/^[\]\x1d()0-9A-Za-z\-]{5,}$/.test(q) && findCode(store, q)) { lookup(q); return; }
     const found = searchItems(store, q, 2);
     if (found.length === 1 || (found.length && !/^\d+$/.test(q))) addItem(found[0], 0);
-    else if (/^\d{5,}$/.test(q)) lookup(q);
+    else if (/^\d{5,}$/.test(q) || (/^\S{6,}$/.test(q) && /\d/.test(q))) lookup(q);   // باركود أو رمز مربع غير مسجّل
   });
 
   /* ---------- سطور الفاتورة ---------- */
@@ -303,9 +308,18 @@ export function docView(ctx, t) {
     field('ملاحظة', h('input', { value: D.m, on: { change: e => { D.m = e.target.value; persist(D); } } }))));
   else put(extra, field('ملاحظة (اختياري)', h('input', { value: D.m, on: { change: e => { D.m = e.target.value; persist(D); } } })));
 
+  // الكاميرا المدمجة: تبقى مفتوحة فوق الفاتورة وتضيف كل صنف يُمسح
+  const camHost = h('div');
+  let cam = null;
+  async function toggleCam() {
+    if (cam) { cam.stop(); cam = null; return; }
+    cam = await inlineScanner(camHost, async code => { const n = await lookup(code); return n ? 'أُضيف: ' + n : 'لم يُضف: ' + parseCode(code).main; }, () => { cam = null; });
+  }
+
   drawHead(); drawLines(); drawFoot();
   const el = h('div', null, head,
-    h('div', { class: 'scan' }, input, scanButton(code => lookup(code), input)),
+    h('div', { class: 'scan' }, input, scanButton(code => lookup(code), input, { inline: toggleCam })),
+    camHost,
     sugg, lines, extra);
   return {
     title: M.title, sub: D.ln.length ? 'مسودة محفوظة' : '', el, foot,

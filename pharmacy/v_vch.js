@@ -2,7 +2,7 @@
 import { h, $, icon, toast, picker, numField, field, seg, confirmBox, put } from './ui.js';
 import { money, num, today, parseExp, norm } from './util.js';
 import { check, totals, partyBalance, CTRL, PARTY_TYPES, ADJ_REASONS, STORES } from './engine.js';
-import { cashAccounts, partyRows, partyFilter, partyName, balWords, printVoucher, searchItems, findBarcode, units, stockOf, qtyText } from './common.js';
+import { cashAccounts, partyRows, partyFilter, partyName, balWords, printVoucher, searchItems, findBarcode, findCode, linkBarcode, units, stockOf, qtyText } from './common.js';
 import { scanButton } from './scan.js';
 
 const TITLES = { rcpt: 'سند قبض', pay: 'سند صرف', exp: 'مصروف', cxf: 'تحويل بين الصناديق', jv: 'قيد يومية', adj: 'تسوية مخزون', xfer: 'تحويل بين المخازن' };
@@ -160,9 +160,9 @@ function stockView(ctx, kind) {
   const input = h('input', { type: 'search', placeholder: 'امسح أو ابحث عن الصنف', autocomplete: 'off' });
   const sugg = h('div', { class: 'sugg hide' });
   const lines = h('section', { class: 'page tight' });
-  function add(it, u) {
+  function add(it, u, x) {
     const uu = units(it)[u || 0];
-    S.ln.unshift({ i: it.id, n: it.n, u: u || 0, z: uu.s, q: kind === 'adj' ? -1 : 1, s: S.s, x: '' });
+    S.ln.unshift({ i: it.id, n: it.n, u: u || 0, z: uu.s, q: kind === 'adj' ? -1 : 1, s: S.s, x: x || '' });
     input.value = ''; sugg.classList.add('hide'); drawLines(); drawFoot();
   }
   input.addEventListener('input', () => {
@@ -170,7 +170,13 @@ function stockView(ctx, kind) {
     for (const it of searchItems(store, q, 10)) put(sugg, h('button', { on: { click: () => add(it, 0) } }, h('span', null, it.n, h('small', null, qtyText(it, stockOf(store.L, it.id, S.s)) + ' في ' + STORES[S.s]))));
     sugg.classList.remove('hide');
   });
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const f = findBarcode(store, input.value.trim()); if (f) add(f.it, f.u); else { const r = searchItems(store, input.value, 1); if (r[0]) add(r[0], 0); } } });
+  // باركود أو رمز مربع: يُضاف صنفه، وغير المسجّل يُربط بصنف
+  async function byCode(c) {
+    const f = findCode(store, c); if (f) { add(f.it, f.u, f.exp); return f.it.n; }
+    const L = await linkBarcode(ctx, c); if (L) { add(L.it, L.u, L.exp); return L.it.n; }
+    return false;
+  }
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const v = input.value.trim(); if (!v) return; if (findCode(store, v)) { byCode(v); return; } const r = searchItems(store, v, 1); if (r[0]) add(r[0], 0); else if (/^\S{5,}$/.test(v) && /\d/.test(v)) byCode(v); } });
   function drawLines() {
     lines.textContent = '';
     if (!S.ln.length) { put(lines, h('p', { class: 'empty' }, kind === 'adj' ? 'أضف الأصناف التي تريد تصحيح كمياتها. اكتب الكمية بالسالب للنقص وبالموجب للزيادة.' : 'أضف الأصناف المنقولة من مخزن إلى آخر.')); return; }
@@ -204,7 +210,7 @@ function stockView(ctx, kind) {
       ? field('السبب', seg(Object.entries(ADJ_REASONS).filter(([k]) => k !== 'found'), S.r, v => { S.r = v; }))
       : h('div', { class: 'row2' }, field('من', seg([[1, STORES[1]], [2, STORES[2]]], S.s, v => { S.s = v; S.s2 = v === 1 ? 2 : 1; toLbl.textContent = STORES[S.s2]; drawLines(); })), h('div', { class: 'field' }, h('span', { class: 'flabel' }, 'إلى'), toLbl)),
     kind === 'adj' ? field('المخزن', seg([[1, STORES[1]], [2, STORES[2]]], S.s, v => { S.s = v; S.ln.forEach(l => { l.s = v; }); drawLines(); })) : null,
-    h('div', { class: 'scan' }, input, scanButton(c => { const f = findBarcode(store, c); if (f) add(f.it, f.u); else toast('الباركود غير مسجّل', { bad: true }); }, input)),
+    h('div', { class: 'scan' }, input, scanButton(c => byCode(c), input)),
     sugg, lines,
     h('div', { class: 'row2' },
       field('التاريخ', h('input', { type: 'date', value: S.d, on: { change: e => { S.d = e.target.value || today(); } } })),

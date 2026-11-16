@@ -1,5 +1,5 @@
 /* أدوات مشتركة بين الصفحات */
-import { h, icon } from './ui.js';
+import { h, icon, toast, picker } from './ui.js';
 import { money, price, qty, norm, phon, phonV, dmy, today, expKey, monthsLeft, monthStart, yearStart, addDays } from './util.js';
 import { TYPES, totals, STORES, PARTY_TYPES, partyBalance } from './engine.js';
 import { printHtml } from './out.js';
@@ -27,7 +27,7 @@ export function itemIndex(store) {
     if (it.act === false) continue;
     list.push({ it, k: norm(it.n + ' ' + (it.co || '')), ph: phon(it.n).replace(/ /g, ''), pv: phonV(it.n) });
     for (const b of it.bc || []) if (b && !byBc.has(b)) byBc.set(b, { id: it.id, u: unitByBarcode(it, b) });
-    (it.u || []).forEach((u, k) => { if (u.b) byBc.set(u.b, { id: it.id, u: k }); });
+    (it.u || []).forEach((u, k) => { if (u.b) byBc.set(u.b, { id: it.id, u: k }); for (const b of u.bx || []) if (b) byBc.set(b, { id: it.id, u: k }); });
   }
   list.sort((a, b) => a.it.n.localeCompare(b.it.n, 'ar'));
   IX = { list, byBc }; IXv = store.ver;
@@ -35,6 +35,78 @@ export function itemIndex(store) {
 }
 function unitByBarcode(it, b) { const k = (it.u || []).findIndex(u => u.b === b); return k >= 0 ? k : 0; }
 export function findBarcode(store, code) { const x = itemIndex(store).byBc.get(String(code).trim()); return x ? { it: store.items.get(x.id), u: x.u } : null; }
+
+/**
+ * يقرأ أي رمز: باركود خطي، أو مربع (QR/DataMatrix)، أو رمز GS1 الدوائي (01)رقم الصنف(17)الانتهاء(10)التشغيلة.
+ * يعيد الأرقام المحتملة للبحث بالترتيب، والصلاحية MM/YYYY والتشغيلة إن وُجدتا.
+ */
+export function parseCode(raw) {
+  const s = String(raw == null ? '' : raw).trim().replace(/^\][A-Za-z]\d/, '');   // بادئة نوع الرمز من بعض القارئات
+  const out = { raw: s, codes: [], exp: '', batch: '', main: '' };
+  const add = c => { c = String(c || '').replace(/\x1d/g, '').trim(); if (c && !out.codes.includes(c)) out.codes.push(c); };
+  const g = s.replace(/\((\d{2,4})\)/g, '\x1d$1').replace(/^\x1d/, '');
+  if (/^01\d{14}/.test(g)) {
+    const FIX = { '01': 14, '02': 14, '11': 6, '12': 6, '13': 6, '15': 6, '16': 6, '17': 6, '20': 2 };
+    let i = 0;
+    while (i < g.length) {
+      if (g[i] === '\x1d') { i++; continue; }
+      const ai = g.slice(i, i + 2);
+      if (FIX[ai]) {
+        const v = g.slice(i + 2, i + 2 + FIX[ai]); i += 2 + FIX[ai];
+        if (ai === '01') { add(v.replace(/^0/, '')); add(v); if (/^00/.test(v)) add(v.slice(2)); }
+        if (ai === '17' && /^\d{6}$/.test(v) && +v.slice(2, 4) >= 1 && +v.slice(2, 4) <= 12) out.exp = v.slice(2, 4) + '/20' + v.slice(0, 2);
+        continue;
+      }
+      const vai = /^(10|21|22|30|37|9\d)$/.test(ai) ? ai : /^(24\d|25\d|71\d)$/.test(g.slice(i, i + 3)) ? g.slice(i, i + 3) : '';
+      if (!vai) break;
+      let j = g.indexOf('\x1d', i + vai.length); if (j < 0) j = g.length;
+      if (vai === '10') out.batch = g.slice(i + 2, j);
+      i = j;
+    }
+  }
+  add(s);
+  if (/^\d{13}$/.test(s)) add('0' + s);
+  if (/^\d{12}$/.test(s)) add('0' + s);
+  if (/^0\d{13}$/.test(s)) add(s.slice(1));
+  out.main = out.codes[0] || '';
+  return out;
+}
+/** يبحث عن الصنف بكل أشكال الرمز المقروء */
+export function findCode(store, raw) {
+  const p = parseCode(raw);
+  for (const c of p.codes) { const f = findBarcode(store, c); if (f && f.it) return Object.assign(f, { code: c, exp: p.exp, batch: p.batch }); }
+  return null;
+}
+/**
+ * باركود غير مسجّل: يُربط بصنف موجود (يُحفظ في وحدته فيُقرأ بعد ذلك مباشرة)، أو يُفتح صنف جديد به.
+ * يعيد { it, u } عند الربط، أو null.
+ */
+export async function linkBarcode(ctx, raw, opt = {}) {
+  const { store } = ctx, p = parseCode(raw), code = p.main;
+  if (!code) return null;
+  const rowsFor = q => q.trim() ? searchItems(store, q, 40).map(it => {
+    const has = (it.bc || []).length || (it.u || []).some(u => u.b);
+    return { value: it, label: it.n, sub: [it.co, has ? '' : 'بلا باركود'].filter(Boolean).join('، ') };
+  }) : [];
+  const r = await picker('باركود غير مسجّل: ' + code, [], { filter: rowsFor, placeholder: 'اكتب اسم الصنف لربط الباركود به',
+    empty: 'اكتب اسم الصنف الذي على علبته هذا الباركود. يُحفظ الربط ويُقرأ الصنف بعدها مباشرة.',
+    add: ctx.can('item-add') ? 'صنف جديد بهذا الباركود، اسمه' : '', addLast: true });
+  if (!r) return null;
+  if (r.add) { if (opt.onNew) opt.onNew(); ctx.go('item-edit/' + encodeURIComponent('bc:' + code)); return null; }
+  const it = r, us = units(it).map(u => Object.assign({}, u));
+  let j = 0;
+  if (us.length > 1) {
+    const ru = await picker('الباركود لأي وحدة؟', us.map((u, k) => ({ value: { k }, label: u.n, sub: 'سعر ' + price(u.p) })));
+    if (!ru) return null;
+    j = ru.k;
+  }
+  const u = us[j];
+  if (!u.b) u.b = code; else if (u.b !== code) u.bx = [...new Set([...(u.bx || []), code])];
+  try { await store.put('items', it.id, { u: us }, true); }   // الوحدات فقط: مسموح للكاشير
+  catch (e) { toast('تعذّر حفظ الربط: ' + (e.code || e.message), { bad: true }); return null; }
+  toast('رُبط الباركود بـ ' + it.n);
+  return { it: store.items.get(it.id) || it, u: j, exp: p.exp };
+}
 export function searchItems(store, q, lim) {
   const n = norm(q); if (!n) return [];
   lim = lim || 30;
@@ -107,7 +179,13 @@ export function partyRows(store, types, hideBal) {
   }
   return rows.sort((a, b) => a.label.localeCompare(b.label, 'ar'));
 }
-export function partyFilter(rows) { return q => { const n = norm(q); return n ? rows.filter(r => norm(r.label + ' ' + (r.value.ph || '')).includes(n)) : rows; }; }
+export function partyFilter(rows) {
+  return q => {
+    const n = norm(q); if (!n) return rows;
+    const rank = r => { const l = norm(r.label); return l.startsWith(n) ? 0 : (' ' + l).includes(' ' + n) ? 1 : 2; };   // يبدأ بالاسم أولاً، ثم كلمة تبدأ به
+    return rows.filter(r => norm(r.label + ' ' + (r.value.ph || '')).includes(n)).sort((a, b) => rank(a) - rank(b));
+  };
+}
 
 /* ---------- الفترات ---------- */
 export const PERIODS = [['m', 'هذا الشهر'], ['pm', 'الشهر الماضي'], ['y', 'هذه السنة'], ['all', 'الكل'], ['d', 'اليوم']];

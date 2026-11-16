@@ -2,7 +2,7 @@
 import { h, icon, toast, field, numField, confirmBox, put, isLatin } from './ui.js';
 import { money, price, qty, norm, dmy, today, addDays, monthsLeft, expKey, num, r2 } from './util.js';
 import { STORES, TYPES } from './engine.js';
-import { units, stockOf, qtyText, expTag, avgCost, partyName, typeName, searchItems, nearestExp } from './common.js';
+import { units, stockOf, qtyText, expTag, avgCost, partyName, typeName, searchItems, nearestExp, findCode, linkBarcode } from './common.js';
 import { scanButton } from './scan.js';
 import { openExport } from './export.js';
 
@@ -12,7 +12,8 @@ const FILTERS = [['all', 'الكل'], ['have', 'متوفر'], ['out', 'نفد'],
 export function itemsView(ctx) {
   const { store } = ctx, L = store.L, d = today(), d90 = addDays(d, -90);
   const list = h('section', { class: 'page tight' });
-  const q = h('input', { type: 'search', value: F.q, placeholder: 'ابحث بالاسم أو الشركة أو الباركود', on: { input: e => { F.q = e.target.value; draw(); } } });
+  const q = h('input', { type: 'search', value: F.q, placeholder: 'ابحث بالاسم أو الشركة أو الباركود', on: { input: e => { F.q = e.target.value; draw(); },
+    keydown: e => { if (e.key !== 'Enter') return; const f = findCode(store, q.value); if (f) { e.preventDefault(); F.q = ''; ctx.go('item/' + encodeURIComponent(f.it.id)); } } } });
   const all = [...store.items.values()].filter(it => it.act !== false);
   function match(it) {
     const s = L.itm.get(it.id), Q = s ? s.Q : 0;
@@ -27,7 +28,7 @@ export function itemsView(ctx) {
     const n = norm(F.q), digits = /^\d{4,}$/.test(F.q.trim());
     let r;
     if (!n) r = all.filter(match).sort((a, b) => a.n.localeCompare(b.n, 'ar'));
-    else if (digits) r = all.filter(it => (it.bc || []).some(b => b.includes(F.q.trim())) && match(it));
+    else if (digits) r = all.filter(it => (it.bc || []).concat(...(it.u || []).map(u => [u.b, ...(u.bx || [])])).some(b => b && b.includes(F.q.trim())) && match(it));
     else r = searchItems(store, F.q, 400).filter(match);
     if (!r.length) { put(list, h('p', { class: 'empty' }, all.length ? 'لا أصناف بهذا البحث.' : 'لا أصناف بعد. استوردها من الإعدادات أو أضف صنفاً.')); return; }
     for (const it of r.slice(0, 200)) {
@@ -43,7 +44,7 @@ export function itemsView(ctx) {
     title: 'الأصناف', sub: all.length + ' صنف', live: true, scanInput: q,
     actions: [
       h('button', { class: 'iconbtn', 'aria-label': 'تصدير قاعدة الأصناف', on: { click: () => exportItems(ctx, all.filter(match)) } }, icon('print')),
-      scanButton(c => { F.q = c; ctx.redraw(); }, q),
+      scanButton(async c => { const f = findCode(store, c); if (f) { ctx.go('item/' + encodeURIComponent(f.it.id)); return; } const L = await linkBarcode(ctx, c); if (L) ctx.go('item/' + encodeURIComponent(L.it.id)); }, q),
       ctx.can('item-add') ? h('a', { class: 'iconbtn', href: '#/item-edit/', 'aria-label': 'صنف جديد' }, icon('plus')) : null],
     el: h('div', null, q,
       h('div', { class: 'chips', style: { marginTop: '10px' } }, FILTERS.map(([k, l]) => h('button', { class: 'chip' + (F.f === k ? ' set' : ''), on: { click: () => { F.f = k; ctx.redraw(); } } }, l))),
