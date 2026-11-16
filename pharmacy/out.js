@@ -32,7 +32,7 @@ export async function shareText(text) {
 export async function printHtml(html, title, kind) {
   const p = document.getElementById('print');
   p.innerHTML = html;
-  p.className = kind === 'receipt' ? 'receipt' : 'page';
+  p.className = kind === 'receipt' ? 'receipt' : 'pa4';
   const A = APP();
   if (A && A.print) { try { return await A.print(title || 'طباعة', kind || 'page'); } catch (e) { return 'fail'; } }
   window.print();

@@ -2,8 +2,9 @@
 import { h, icon, toast, field, numField, confirmBox, put, isLatin } from './ui.js';
 import { money, price, qty, norm, dmy, today, addDays, monthsLeft, expKey, num, r2 } from './util.js';
 import { STORES, TYPES } from './engine.js';
-import { units, stockOf, qtyText, expTag, avgCost, partyName, typeName, searchItems } from './common.js';
+import { units, stockOf, qtyText, expTag, avgCost, partyName, typeName, searchItems, nearestExp } from './common.js';
 import { scanCode } from './scan.js';
+import { openExport } from './export.js';
 
 const F = { q: '', f: 'all' };
 const FILTERS = [['all', 'الكل'], ['have', 'متوفر'], ['out', 'نفد'], ['exp', 'قريب الانتهاء'], ['still', 'راكد']];
@@ -41,6 +42,7 @@ export function itemsView(ctx) {
   return {
     title: 'الأصناف', sub: all.length + ' صنف', live: true,
     actions: [
+      h('button', { class: 'iconbtn', 'aria-label': 'تصدير قاعدة الأصناف', on: { click: () => exportItems(ctx, all.filter(match)) } }, icon('print')),
       h('button', { class: 'iconbtn', 'aria-label': 'مسح باركود', on: { click: async () => { const c = await scanCode(); if (c) { F.q = c; ctx.redraw(); } } } }, icon('barcode')),
       ctx.can('item-add') ? h('a', { class: 'iconbtn', href: '#/item-edit/', 'aria-label': 'صنف جديد' }, icon('plus')) : null],
     el: h('div', null, q,
@@ -135,4 +137,32 @@ export function itemEdit(ctx, id) {
     if (preBc) history.back(); else ctx.go('item/' + encodeURIComponent(nid), true);
   } } }, icon('check', 20), 'حفظ الصنف'))));
   return { title: cur ? 'تعديل صنف' : 'صنف جديد', el: body, foot };
+}
+
+/** قاعدة الأصناف: الأسعار والمخزون والصلاحيات، بنفس طريقة تنزيل تطبيق الجرد */
+function exportItems(ctx, list) {
+  const { store } = ctx, L = store.L, prof = ctx.can('profit');
+  const rows = list.slice().sort((a, b) => a.n.localeCompare(b.n, 'ar')).map(it => {
+    const s = L.itm.get(it.id) || { Q: 0, V: 0, st: {} }, us = units(it), u0 = us[0] || {}, u1 = us[1] || {};
+    const sz = u0.s || 1;
+    return { code: it.id, bc: (it.bc || []).join(' '), name: it.n, co: it.co || '', unit: u0.n || '', price: u0.p || 0, unit2: u1.n || '', price2: u1.p || '',
+      s1: (s.st[1] || 0) / sz, s2: (s.st[2] || 0) / sz, q: (s.Q || 0) / sz, cost: prof ? avgCost(L, store, it.id) * sz : '', value: prof ? s.V || 0 : '',
+      x: nearestExp(L, it.id, 1) || nearestExp(L, it.id, 2), last: s.lastSale || '' };
+  });
+  const cols = [
+    { k: 'code', t: 'رقم الصنف', f: '' }, { k: 'bc', t: 'الباركود', f: '' }, { k: 'name', t: 'اسم الصنف', f: '' }, { k: 'co', t: 'الشركة', f: '' },
+    { k: 'unit', t: 'الوحدة', f: '' }, { k: 'price', t: 'سعر البيع', f: 'n' }, { k: 'unit2', t: 'الوحدة الصغرى', f: '', on: false }, { k: 'price2', t: 'سعرها', f: 'n', on: false },
+    { k: 's1', t: 'الصيدلية', f: 'q' }, { k: 's2', t: 'المخزن', f: 'q' }, { k: 'q', t: 'الإجمالي', f: 'q', on: false },
+    ...(prof ? [{ k: 'cost', t: 'متوسط التكلفة', f: 'n', on: false }, { k: 'value', t: 'قيمة المخزون', f: 'n', on: false }] : []),
+    { k: 'x', t: 'أقرب صلاحية', f: 'x' }, { k: 'last', t: 'آخر بيع', f: 'd', on: false }
+  ];
+  openExport({ id: 'items', title: 'قاعدة الأصناف', file: 'قاعدة_الأصناف', sheet: 'الأصناف', settings: store.settings, head: [list.length + ' صنف'], cols, rows,
+    totals: prof ? [['قيمة المخزون بالتكلفة', rows.reduce((t, r) => t + (+r.value || 0), 0)]] : [],
+    presets: [
+      { label: 'قاعدة الأصناف', cols: [['code'], ['bc'], ['name'], ['co'], ['unit']] },
+      { label: 'قائمة الأسعار', cols: [['code'], ['name'], ['unit'], ['price'], ['unit2'], ['price2']] },
+      { label: 'المخزون والصلاحية', cols: [['code'], ['name'], ['unit'], ['s1'], ['s2'], ['q'], ['x']] },
+      ...(prof ? [{ label: 'قيمة المخزون', cols: [['code'], ['name'], ['q'], ['cost'], ['value']] }] : []),
+      { label: 'English (ID, Name, Qty)', cols: [['code', 'ID'], ['bc', 'Barcode'], ['name', 'Name'], ['unit', 'Unit'], ['q', 'Qty'], ['x', 'Expiry']] }
+    ] });
 }

@@ -96,6 +96,12 @@ input.num { text-align: left; }
 .chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
 .note { padding: 10px 12px; border-radius: var(--r); background: var(--amber-t); color: var(--amber); font-size: 14px; margin: 10px 0; }
 .note.bad { background: var(--red-t); color: var(--red); } .note.good { background: var(--green-t); color: var(--green-d); }
+.xgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.xgrid .btn { min-height: 46px; }
+.colset { margin-top: 14px; border-top: 1px solid var(--rule); padding-top: 10px; }
+.colset summary { font-weight: 600; cursor: pointer; padding: 6px 2px; }
+.colrow { display: grid; grid-template-columns: 28px 1fr 46px 46px; gap: 6px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--rule); }
+.colrow input[type=checkbox] { width: 22px; height: 22px; }
 .empty { text-align: center; color: var(--ink2); padding: 28px 10px; }
 .lead { font-size: 16px; margin: 4px 0 8px; }
 
@@ -181,12 +187,29 @@ input.num { text-align: left; }
   body > *:not(#print) { display: none !important; }
   #print { display: block !important; }
   #print { font: 12px/1.45 var(--ui); color: #000; }
-  #print h2 { font: 700 16px var(--book); text-align: center; margin: 0 0 2px; }
-  #print .pc { text-align: center; } #print table { width: 100%; border-collapse: collapse; }
-  #print td, #print th { padding: 2px 0; border-bottom: 1px dashed #999; text-align: right; font-size: 11.5px; }
-  #print td.n, #print th.n { text-align: left; }
-  #print .ptot { font-size: 14px; font-weight: 700; display: flex; justify-content: space-between; margin-top: 6px; }
-  #print.receipt { width: auto; }
+  #print table { width: 100%; border-collapse: collapse; }
+  /* إيصال صغير لطابعة الفواتير */
+  #print.receipt h2 { font: 700 16px var(--book); text-align: center; margin: 0 0 2px; }
+  #print.receipt .pc { text-align: center; }
+  #print.receipt td, #print.receipt th { padding: 2px 0; border-bottom: 1px dashed #999; text-align: right; font-size: 11.5px; }
+  #print.receipt td.n, #print.receipt th.n { text-align: left; }
+  #print.receipt .ptot { font-size: 14px; font-weight: 700; display: flex; justify-content: space-between; margin-top: 6px; }
+  /* ورقة A4 مرتبة */
+  #print.pa4 { font-size: 11px; }
+  #print.pa4 .doc-h { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; border-bottom: 2px solid #0e6b5c; padding-bottom: 6px; margin-bottom: 8px; }
+  #print.pa4 .doc-h h1 { font: 700 18px var(--book); margin: 0 0 2px; }
+  #print.pa4 .doc-s { text-align: left; font-size: 10.5px; color: #333; }
+  #print.pa4 h2 { font: 700 14px var(--book); margin: 14px 0 6px; }
+  #print.pa4 .grid th { background: #e3efeb; border: 1px solid #8fa5a0; padding: 4px 5px; font-weight: 600; text-align: right; }
+  #print.pa4 .grid td { border: 1px solid #c3cfd2; padding: 3px 5px; vertical-align: top; text-align: right; }
+  #print.pa4 .grid .n { text-align: left; direction: ltr; white-space: nowrap; }
+  #print.pa4 .grid .i { width: 26px; text-align: center; color: #555; }
+  #print.pa4 .grid tr:nth-child(even) td { background: #f6f8f7; }
+  #print.pa4 thead { display: table-header-group; }
+  #print.pa4 tr { break-inside: avoid; }
+  #print.pa4 .tots { width: auto; min-width: 45%; margin: 8px 0 0 auto; }
+  #print.pa4 .tots td { border: 1px solid #c3cfd2; padding: 4px 8px; font-weight: 600; }
+  #print.pa4 .tots .n { text-align: left; direction: ltr; }
   @page { margin: 4mm; }
 }
 @media (prefers-reduced-motion: reduce) { .sheet, .sheetwrap, .toast { transition: none; } }

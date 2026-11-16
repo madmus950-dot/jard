@@ -3,7 +3,8 @@ import { h, icon, toast, field, seg, confirmBox, put, sheet, numField } from './
 import { money, norm, dmy, today, daysBetween, num } from './util.js';
 import { statement, partyBalance, PARTY_TYPES, totals, check, CTRL } from './engine.js';
 import { balWords, balEl, periodChips, periodRange, typeName, printVoucher } from './common.js';
-import { shareText, saveXlsx, printHtml } from './out.js';
+import { shareText } from './out.js';
+import { openExport } from './export.js';
 
 const TABS = [['c', 'العملاء'], ['s', 'الموردون'], ['e', 'الموظفون'], ['o', 'أخرى']];
 const view = { q: '', sort: 'bal' };
@@ -40,7 +41,11 @@ export function partiesView(ctx, type) {
   const tw = balWords(total, type);
   return {
     title: 'الحسابات', live: true,
-    actions: ctx.can('party-add') ? [h('a', { class: 'iconbtn', href: '#/party-edit//' + type, 'aria-label': 'إضافة اسم' }, icon('plus'))] : [],
+    actions: [h('button', { class: 'iconbtn', 'aria-label': 'تصدير', on: { click: () => openExport({ id: 'parties', title: TABS.find(x => x[0] === type)[1], file: TABS.find(x => x[0] === type)[1], sheet: 'الأرصدة', settings: store.settings, head: ['حتى ' + dmy(today())],
+        cols: [{ k: 'n', t: 'الاسم', f: '' }, { k: 'ph', t: 'الهاتف', f: '' }, { k: 'dr', t: 'عليه (لنا)', f: 'n' }, { k: 'cr', t: 'له (علينا)', f: 'n' }, { k: 'last', t: 'آخر حركة', f: 'd' }, { k: 'lp', t: 'آخر سداد', f: 'd', on: false }],
+        rows: rows.slice().sort((a, b) => b.b - a.b).map(x => ({ n: x.p.n, ph: x.p.ph || '', dr: x.b > 0.004 ? x.b : '', cr: x.b < -0.004 ? -x.b : '', last: x.last, lp: x.lastPay })),
+        totals: [['مجموع ما لنا', rows.reduce((s, x) => s + (x.b > 0 ? x.b : 0), 0)], ['مجموع ما علينا', rows.reduce((s, x) => s + (x.b < 0 ? -x.b : 0), 0)]] }) } }, icon('print')),
+      ctx.can('party-add') ? h('a', { class: 'iconbtn', href: '#/party-edit//' + type, 'aria-label': 'إضافة اسم' }, icon('plus')) : null],
     el: h('div', null,
       seg(TABS, type, v => ctx.go('parties/' + v, true)),
       h('div', { class: 'ln', style: { borderBottom: 0, padding: '14px 4px 6px' } },
@@ -74,11 +79,13 @@ export function partyView(ctx, id) {
     const last = st.rows.slice(-6).map(r => dmy(r.d) + '  ' + r.m + '  ' + (r.dr ? '+' + money(r.dr) : '-' + money(r.cr)));
     return [(S.name || 'الصيدلية') + ' — كشف حساب', p.n, (from ? 'من ' + dmy(from) + ' ' : '') + 'حتى ' + dmy(to || today()), '', ...last, '', 'الرصيد: ' + money(cw.amt) + ' ريال ' + cw.txt].join('\n');
   };
-  const rowsX = () => [['التاريخ', 'البيان', 'مدين', 'دائن', 'الرصيد'], ...(from && st.open ? [[from, 'رصيد سابق', '', '', st.open]] : []), ...st.rows.map(r => [r.d, r.m, r.dr || '', r.cr || '', r.bal]), ['', 'الإجمالي', st.dr, st.cr, st.close]];
-  const printSt = () => {
-    const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
-    const body = rowsX().slice(1).map(r => `<tr><td>${esc(r[0] ? dmy(r[0]) : '')}</td><td>${esc(r[1])}</td><td class="n">${r[2] !== '' ? money(r[2]) : ''}</td><td class="n">${r[3] !== '' ? money(r[3]) : ''}</td><td class="n">${money(r[4])}</td></tr>`).join('');
-    printHtml(`<div><h2>${esc(store.settings.name || 'الصيدلية')}</h2><div class="pc">كشف حساب: ${esc(p.n)}${p.ph ? ' — ' + esc(p.ph) : ''}</div><div class="pc">${from ? 'من ' + dmy(from) + ' ' : ''}حتى ${dmy(to || today())}</div><table><tr><th>التاريخ</th><th>البيان</th><th class="n">مدين</th><th class="n">دائن</th><th class="n">الرصيد</th></tr>${body}</table><div class="ptot"><span>الرصيد</span><span>${money(Math.abs(st.close))} ${balWords(st.close, p.t).txt}</span></div></div>`, 'كشف حساب ' + p.n);
+  const exportSt = () => {
+    const cw = balWords(st.close, p.t);
+    const rows = [...(from && st.open ? [{ d: from, no: '', m: 'رصيد سابق', dr: '', cr: '', bal: st.open }] : []), ...st.rows.map(r => ({ d: r.d, no: r.v.no || '', m: r.m, dr: r.dr || '', cr: r.cr || '', bal: r.bal }))];
+    openExport({ id: 'stmt', title: 'كشف حساب: ' + p.n, file: 'كشف_' + p.n, sheet: 'كشف حساب', settings: store.settings,
+      head: [PARTY_TYPES[p.t] + (p.ph ? '، ' + p.ph : ''), (from ? 'من ' + dmy(from) + ' ' : '') + 'حتى ' + dmy(to || today())],
+      cols: [{ k: 'd', t: 'التاريخ', f: 'd' }, { k: 'no', t: 'رقم السند', f: '' }, { k: 'm', t: 'البيان', f: '' }, { k: 'dr', t: 'مدين', f: 'n' }, { k: 'cr', t: 'دائن', f: 'n' }, { k: 'bal', t: 'الرصيد', f: 'n' }],
+      rows, totals: [['مجموع المدين', st.dr], ['مجموع الدائن', st.cr], ['الرصيد (' + cw.txt + ')', cw.amt]] });
   };
   const act = (label, ic, fn) => h('button', { class: 'btn ghost sm', on: { click: fn } }, h('span', null, label));
   const actions = h('div', { class: 'actions', style: { marginTop: '0', marginBottom: '12px' } },
@@ -86,9 +93,8 @@ export function partyView(ctx, id) {
     p.t === 's' && ctx.can('pay') ? h('a', { class: 'btn sm', href: '#/v/pay/' + encodeURIComponent(id) }, 'صرف له') : null,
     p.t === 'e' && ctx.can('pay') ? h('a', { class: 'btn sm', href: '#/v/pay/' + encodeURIComponent(id) }, 'صرف له') : null,
     act('مشاركة', 'share', async () => { const r = await shareText(textSummary()); if (r === 'copied') toast('نُسخ الكشف. الصقه في واتساب.'); }),
-    act('طباعة', 'print', printSt),
-    p.t === 'c' && b > 0.5 && ctx.can('jv') ? act('إعدام الدين', 'trash', () => writeOff(ctx, p, b)) : null,
-    act('Excel', 'doc', async () => { try { await saveXlsx('كشف_' + p.n.replace(/\s+/g, '_') + '.xlsx', [{ name: 'كشف حساب', rows: rowsX(), widths: [12, 46, 14, 14, 16] }]); } catch (e) { toast('تعذّر الحفظ', { bad: true }); } }));
+    act('تصدير وطباعة', 'print', exportSt),
+    p.t === 'c' && b > 0.5 && ctx.can('jv') ? act('إعدام الدين', 'trash', () => writeOff(ctx, p, b)) : null);
   return {
     title: p.n, sub: PARTY_TYPES[p.t] + (p.ph ? '، ' + p.ph : ''), live: true,
     actions: ctx.can('party-add') ? [h('a', { class: 'iconbtn', href: '#/party-edit/' + encodeURIComponent(id), 'aria-label': 'تعديل' }, icon('edit'))] : [],

@@ -3,6 +3,7 @@ import { h, icon } from './ui.js';
 import { money, price, qty, norm, phon, phonV, dmy, today, expKey, monthsLeft, monthStart, yearStart, addDays } from './util.js';
 import { TYPES, totals, STORES, PARTY_TYPES, partyBalance } from './engine.js';
 import { printHtml } from './out.js';
+import { openExport } from './export.js';
 
 export { money, price, qty };
 export const typeName = t => TYPES[t] || t;
@@ -139,7 +140,7 @@ export function printVoucher(store, v) {
   let rows = '';
   for (const l of v.ln || []) {
     const it = store.items.get(l.i) || {}, u = (it.u || [])[l.u] || {};
-    const pr = v.t === 'pur' || v.t === 'pret' ? l.c : l.p;
+    const pr = (v.t === 'pur' || v.t === 'pret' || v.t === 'open' ? l.c : l.p) || 0;
     rows += `<tr><td>${esc(l.n || it.n)}${u.n && u.s !== 1 ? ' (' + esc(u.n) + ')' : ''}</td><td class="n">${qty(l.q)}${l.f ? '+' + qty(l.f) : ''}×${price(pr)}</td><td class="n">${money(l.q * pr)}</td></tr>`;
   }
   const who = v.pt ? partyName(store, v.pt) : v.ac ? (store.accounts.get(v.ac) || {}).n : '';
@@ -162,3 +163,59 @@ export function emptyState(text, btn) {
   return h('div', { class: 'empty' }, h('p', null, text), btn || null);
 }
 export function ic(name) { return icon(name, 20); }
+
+/* ---------- تصدير وطباعة سند بجدول كامل (A4، Excel، CSV، نسخ) ---------- */
+export function exportVoucher(store, v) {
+  const tt = totals(v), meta = store.L.vm.get(v.id) || {};
+  const isBuy = v.t === 'pur' || v.t === 'pret' || v.t === 'open';
+  const who = v.pt ? partyName(store, v.pt) : v.ac ? (store.accounts.get(v.ac) || {}).n : '';
+  const head = [dmy(v.d), who ? (isBuy ? 'المورد: ' : v.t === 'pay' ? 'إلى: ' : 'العميل: ') + who : '', v.inv ? 'فاتورة المورد ' + v.inv : '', v.m || ''].filter(Boolean);
+  const rows = (v.ln || []).map(l => {
+    const it = store.items.get(l.i) || {}, u = (it.u || [])[l.u] || {};
+    const price = isBuy ? l.c : l.p;
+    return {
+      code: it.src || l.i, bc: (u.b || (it.bc || [])[0] || ''), name: l.n || it.n || l.i, co: it.co || '', unit: u.n || (l.z === 1 ? (units(it)[0] || {}).n : '') || '',
+      q: +l.q || 0, f: +l.f || '', base: (+l.q || 0) * (+l.z || 1) + (+l.f || 0) * (+l.z || 1), price: price == null ? '' : +price,
+      amt: price == null ? '' : (+l.q || 0) * (+price || 0), x: l.x || '', st: STORES[l.s || 1] + (l.s2 ? ' ← ' + STORES[l.s2] : '')
+    };
+  });
+  const cols = [
+    { k: 'code', t: 'رقم الصنف', f: '' }, { k: 'bc', t: 'الباركود', f: '', on: false }, { k: 'name', t: 'اسم الصنف', f: '' },
+    { k: 'co', t: 'الشركة', f: '', on: false }, { k: 'unit', t: 'الوحدة', f: '' }, { k: 'q', t: 'الكمية', f: 'q' },
+    ...(v.t === 'pur' || v.t === 'pret' ? [{ k: 'f', t: 'بونص', f: 'q' }] : []),
+    { k: 'base', t: 'الكمية بالوحدة الكبرى', f: 'q', on: false },
+    ...(v.t === 'adj' || v.t === 'xfer' ? [] : [{ k: 'price', t: isBuy ? 'التكلفة' : 'السعر', f: 'n' }, { k: 'amt', t: 'المبلغ', f: 'n' }]),
+    { k: 'x', t: 'تاريخ الانتهاء', f: 'x', on: isBuy || v.t === 'adj' }, { k: 'st', t: 'المخزن', f: '', on: v.t === 'xfer' || v.t === 'open' }
+  ];
+  const tot = [];
+  if (['sale', 'sret', 'pur', 'pret'].includes(v.t)) {
+    if (tt.ds) tot.push(['الإجمالي قبل الخصم', tt.gross], ['الخصم', tt.ds]);
+    tot.push(['الإجمالي', tt.tot], ['المدفوع نقداً', tt.pd]);
+    if (tt.credit > 0.004) tot.push(['المتبقي آجل', tt.credit]);
+  } else if (v.t === 'open') tot.push(['قيمة المخزون', rows.reduce((s, r) => s + (+r.amt || 0), 0)], ['رأس المال الناتج', meta.tot || 0]);
+  else if (v.t === 'adj') tot.push(['قيمة التسوية بالتكلفة', meta.tot || 0]);
+  else if (tt.tot) tot.push(['المبلغ', tt.tot]);
+  const extra = [];
+  if (v.t === 'open' && (v.pb || []).length) extra.push({ name: 'أرصدة الأسماء', cols: [{ k: 'n', t: 'الاسم', f: '' }, { k: 't', t: 'النوع', f: '' }, { k: 'dr', t: 'عليه (مدين)', f: 'n' }, { k: 'cr', t: 'له (دائن)', f: 'n' }],
+    rows: v.pb.map(b => { const p = store.parties.get(b.pt) || {}; return { n: p.n || b.pt, t: PARTY_TYPES[p.t] || '', dr: b.b > 0 ? b.b : '', cr: b.b < 0 ? -b.b : '' }; }) });
+  const posts = store.L.post.filter(e => e.v.id === v.id);
+  if (!rows.length || v.t === 'rcpt' || v.t === 'pay' || v.t === 'jv' || v.t === 'cxf') {
+    const jr = posts.map(e => ({ a: (store.accounts.get(e.a) || {}).n || e.a, p: e.p ? partyName(store, e.p) : '', dr: e.dr || '', cr: e.cr || '' }));
+    if (!rows.length) {
+      return openExport({ id: 'je', title: typeName(v.t) + ' ' + (v.no || ''), head, settings: store.settings, sheet: 'القيد',
+        cols: [{ k: 'a', t: 'الحساب', f: '' }, { k: 'p', t: 'الاسم', f: '' }, { k: 'dr', t: 'مدين', f: 'n' }, { k: 'cr', t: 'دائن', f: 'n' }], rows: jr, totals: tot,
+        receipt: ['rcpt', 'pay'].includes(v.t) ? () => printVoucher(store, v) : null });
+    }
+  }
+  openExport({
+    id: 'v-' + (v.t === 'sret' ? 'sale' : v.t === 'pret' ? 'pur' : v.t), title: typeName(v.t) + ' ' + (v.no || ''), file: typeName(v.t) + '_' + (v.no || ''), head, settings: store.settings, sheet: typeName(v.t),
+    cols, rows, totals: tot, extra,
+    receipt: ['sale', 'sret'].includes(v.t) ? () => printVoucher(store, v) : null,
+    presets: [
+      { label: 'أعمدة الفاتورة', cols: [['code'], ['name'], ['unit'], ['q'], ['price'], ['amt']] },
+      { label: 'رقم الصنف + الكمية فقط', cols: [['code'], ['base', 'الكمية']] },
+      { label: 'للجرد والمراجعة', cols: [['code'], ['bc'], ['name'], ['unit'], ['q'], ['x'], ['st']] },
+      { label: 'English (ID, Name, Qty)', cols: [['code', 'ID'], ['name', 'Name'], ['unit', 'Unit'], ['q', 'Qty'], ['price', 'Price'], ['amt', 'Amount'], ['x', 'Expiry']] }
+    ]
+  });
+}

@@ -2,7 +2,7 @@
 import { h, icon, toast, field, numField, seg, confirmBox, sheet, put } from './ui.js';
 import { money, price, qty, norm, dmy, today, num, r2, newId } from './util.js';
 import { totals, check, TYPES, STORES, PARTY_TYPES, describe } from './engine.js';
-import { typeName, voucherLine, partyName, units, printVoucher, cashAccounts } from './common.js';
+import { typeName, voucherLine, partyName, units, printVoucher, cashAccounts, exportVoucher } from './common.js';
 import { shareText, printHtml } from './out.js';
 
 export function moreView(ctx) {
@@ -108,7 +108,8 @@ export function voucherView(ctx, id) {
         h('thead', null, h('tr', null, h('th', null, 'الحساب'), h('th', { class: 'n' }, 'مدين'), h('th', { class: 'n' }, 'دائن'))),
         h('tbody', null, posts.map(e => h('tr', null, h('td', null, (store.accounts.get(e.a) || {}).n || e.a, e.p ? h('small', { style: { display: 'block' } }, partyName(store, e.p)) : null), h('td', { class: 'n num' }, e.dr ? money(e.dr) : ''), h('td', { class: 'n num' }, e.cr ? money(e.cr) : '')))))) : null,
       h('div', { class: 'actions' },
-        h('button', { class: 'btn ghost', on: { click: () => printVoucher(store, v) } }, icon('print', 20), 'طباعة'),
+        h('button', { class: 'btn', on: { click: () => exportVoucher(store, v) } }, icon('print', 20), 'تصدير وطباعة'),
+        ['sale', 'sret', 'rcpt', 'pay'].includes(v.t) ? h('button', { class: 'btn ghost', on: { click: () => printVoucher(store, v) } }, 'إيصال صغير') : null,
         h('button', { class: 'btn ghost', on: { click: async () => { const r = await shareText(typeName(v.t) + ' ' + (v.no || '') + '\n' + dmy(v.d) + (who ? '\n' + who : '') + '\n' + (v.ln || []).map(l => (l.n || '') + ' × ' + qty(l.q)).join('\n') + '\nالإجمالي: ' + money(tt.tot)); if (r === 'copied') toast('نُسخ النص'); } } }, icon('share', 20), 'مشاركة'),
         ctx.can('void') && v.st !== 'void' && !locked ? h('button', { class: 'btn ghost', style: { color: 'var(--red)' }, on: { click: doVoid } }, icon('trash', 20), 'إلغاء') : null))
   };

@@ -3,7 +3,7 @@ import { h, icon, toast, put } from './ui.js';
 import { money, qty, dmy, today, addDays, monthsLeft, expKey, r2, daysBetween, rangeText } from './util.js';
 import { trialBalance, profitLoss, balanceSheet, aging, expiries, itemSales, statement, accBalance, STORES } from './engine.js';
 import { periodChips, periodRange, cashAccounts, units, qtyText, partyName, balWords } from './common.js';
-import { saveXlsx, printHtml } from './out.js';
+import { openExport } from './export.js';
 
 const LIST = [
   ['daily', 'المبيعات اليومية', 'المبيعات والمرتجعات والنقد والآجل لكل يوم', 'r-daily'],
@@ -37,19 +37,22 @@ function tableEl(cols, rows, foot) {
 function fmt(v, c) { if (v === '' || v == null) return ''; if (c.n === 'q') return qty(v); if (c.n) return money(v); if (c.d) return dmy(v); return String(v); }
 
 function frame(ctx, k, title, opts, content) {
-  const exportX = async () => {
-    try { const r = await saveXlsx(title.replace(/\s+/g, '_') + '_' + today() + '.xlsx', opts.sheets()); if (r === 'download') toast('حُفظ الملف'); }
-    catch (e) { toast('تعذّر الحفظ: ' + (e.message || e), { bad: true }); }
+  const typed = rows => (t, i) => {
+    const vals = rows.map(r => r[i]).filter(v => v !== '' && v != null);
+    const f = vals.length && vals.every(v => typeof v === 'number') ? 'n' : vals.some(v => /^\d{4}-\d{2}-\d{2}$/.test(v)) ? 'd' : '';
+    return { k: i, t, f };
   };
-  const printIt = () => {
-    const sh = opts.sheets()[0], esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
-    const body = sh.rows.slice(1).map(r => '<tr>' + r.map(v => `<td class="${typeof v === 'number' ? 'n' : ''}">${typeof v === 'number' ? money(v) : esc(v)}</td>`).join('') + '</tr>').join('');
-    printHtml(`<div><h2>${esc(ctx.store.settings.name || 'الصيدلية')}</h2><div class="pc">${esc(title)} — ${esc(opts.range || dmy(today()))}</div><table><tr>${sh.rows[0].map(x => `<th>${esc(x)}</th>`).join('')}</tr>${body}</table></div>`, title);
+  const exp = () => {
+    const sh = opts.sheets(), main = sh[0], body = main.rows.slice(1);
+    openExport({ id: 'r-' + k, title, file: title, sheet: main.name, head: [opts.range || ''], settings: ctx.store.settings,
+      cols: main.rows[0].map(typed(body)), rows: body,
+      extra: sh.slice(1).map(s => ({ name: s.name, cols: s.rows[0].map(typed(s.rows.slice(1))), rows: s.rows.slice(1) })) });
   };
   return {
     title, sub: opts.range || '',
-    actions: [h('button', { class: 'iconbtn', 'aria-label': 'طباعة', on: { click: printIt } }, icon('print')), h('button', { class: 'iconbtn', 'aria-label': 'حفظ Excel', on: { click: exportX } }, icon('share'))],
-    el: h('div', null, opts.chips ? periodChips(st.per, p => { st.per = p; ctx.redraw(); }, opts.chips) : null, content)
+    actions: [h('button', { class: 'iconbtn', 'aria-label': 'تصدير وطباعة', on: { click: exp } }, icon('print'))],
+    el: h('div', null, opts.chips ? periodChips(st.per, p => { st.per = p; ctx.redraw(); }, opts.chips) : null,
+      h('button', { class: 'btn ghost wide', style: { marginBottom: '10px' }, on: { click: exp } }, icon('print', 18), 'تصدير وطباعة'), content)
   };
 }
 
