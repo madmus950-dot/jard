@@ -216,7 +216,7 @@ function lineRow(o, l, rev) {
         h('b', { dir: 'ltr', class: 'lat' }, l.item ? l.item.n : (l.read && l.read.name) || 'صنف غير معروف'),
         h('small', null,
           h('span', { class: 'conf ' + (l.conf || 'none') }, CONF_AR[l.conf || 'none']),
-          l.exp ? h('span', { class: 'exp ' + expState(l.exp), dir: 'ltr' }, l.exp) : null,
+          l.exp ? h('span', { class: 'xd ' + (expState(l.exp) ? 'x-' + expState(l.exp) : ''), dir: 'ltr' }, l.exp) : null,
           l.read && l.read.strength ? h('span', { dir: 'ltr' }, l.read.strength) : null),
         iss.length ? h('div', { class: 'iss' }, iss.map(([k, t]) => h('span', { class: 'tag ' + k }, t))) : null),
       h('div', { class: 'lnum' },
