@@ -67,7 +67,7 @@ export function itemView(ctx, id) {
   return {
     title: it.n, sub: it.co || '',
     actions: ctx.can('item-edit') ? [h('a', { class: 'iconbtn', href: '#/item-edit/' + encodeURIComponent(id), 'aria-label': 'تعديل' }, icon('edit'))] : [],
-    el: h('div', null,
+    el: h('div', { class: 'twocol' }, h('div', null,
       h('section', { class: 'page' },
         h('div', { class: 'ph' }, h('h2', { class: isLatin(it.n) ? 'lat' : '' }, it.n), h('div', { class: 'meta' }, [it.co, (it.bc || []).slice(0, 2).join('، ')].filter(Boolean).join('، '))),
         row('المخزون', qtyText(it, s.Q), s.Q > 1e-9 ? '' : 'red'),
@@ -80,7 +80,8 @@ export function itemView(ctx, id) {
         row('مبيعات آخر 30 يوماً', qtyText(it, sold(30))),
         row('مبيعات آخر 90 يوماً', qtyText(it, s90)),
         s90 > 0 && s.Q > 0 ? row('يكفي تقريباً', Math.round(s.Q / (s90 / 3) * 10) / 10 + ' شهر') : null,
-        lastPur ? row('آخر شراء', dmy(lastPur.d) + (lastPur.pt ? '، ' + partyName(store, lastPur.pt) : '')) : null),
+        lastPur ? row('آخر شراء', dmy(lastPur.d) + (lastPur.pt ? '، ' + partyName(store, lastPur.pt) : '')) : null)),
+      h('div', null,
       batches.length ? h('h3', { class: 'sect' }, 'الصلاحيات في المخزون') : null,
       batches.length ? h('section', { class: 'page tight' }, batches.map(b => h('div', { class: 'ln' },
         h('span', { class: 'k' }, h('b', null, b.x || 'بلا تاريخ'), h('small', null, STORES[b.st])),
@@ -88,7 +89,7 @@ export function itemView(ctx, id) {
       h('h3', { class: 'sect' }, 'حركة الصنف'),
       h('section', { class: 'page tight' }, mv.length ? mv.slice(0, 60).map(m => h('a', { class: 'ln link', href: '#/vch/' + encodeURIComponent(m.v.id) },
         h('span', { class: 'k' }, h('b', null, typeName(m.v.t) + ' ' + (m.v.no || '')), h('small', null, [dmy(m.d), STORES[m.s], m.pt ? partyName(store, m.pt) : '', m.x].filter(Boolean).join('، '))),
-        h('span', { class: 'v ' + (m.q < 0 ? 'red' : 'green'), style: { fontSize: '15px' } }, (m.q > 0 ? '+' : '−') + qtyText(it, Math.abs(m.q))))) : h('p', { class: 'empty' }, 'لا حركة لهذا الصنف بعد.')))
+        h('span', { class: 'v ' + (m.q < 0 ? 'red' : 'green'), style: { fontSize: '15px' } }, (m.q > 0 ? '+' : '−') + qtyText(it, Math.abs(m.q))))) : h('p', { class: 'empty' }, 'لا حركة لهذا الصنف بعد.'))))
   };
 }
 

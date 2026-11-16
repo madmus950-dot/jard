@@ -30,6 +30,8 @@ export const frag = (...kids) => { const f = document.createDocumentFragment(); 
 export function put(el, ...kids) { add(el, kids); return el; }
 /** اسم لاتيني (أسماء الأدوية) يُكتب بخط الواجهة لا بخط النسخ */
 export const isLatin = s => !/[\u0600-\u06FF]/.test(String(s || ''));
+/** شاشة الكمبيوتر العريضة */
+export const wide = () => matchMedia('(min-width: 1000px)').matches;
 
 /* ---------- أيقونات خطية بسيطة ---------- */
 const P = {
@@ -85,7 +87,7 @@ export function sheet(title, body, opt = {}) {
   const close = () => { wrap.classList.remove('on'); setTimeout(() => wrap.remove(), 180); removeEventListener('popstate', onPop); if (opt.onClose) opt.onClose(); };
   const onPop = () => close();
   const wrap = h('div', { class: 'sheetwrap', on: { click: e => { if (e.target === wrap) { history.back(); } } } },
-    h('div', { class: 'sheet' + (opt.tall ? ' tall' : ''), role: 'dialog', 'aria-label': title },
+    h('div', { class: 'sheet' + (opt.tall ? ' tall' : '') + (opt.cls ? ' ' + opt.cls : ''), role: 'dialog', 'aria-label': title },
       h('div', { class: 'sheethead' }, h('h3', null, title), h('button', { class: 'iconbtn', 'aria-label': 'إغلاق', on: { click: () => history.back() } }, icon('x', 20))),
       h('div', { class: 'sheetbody' }, body)));
   document.body.appendChild(wrap);
@@ -126,9 +128,19 @@ export function picker(title, rows, opt = {}) {
         h('span', { class: 'pmain' }, h('b', null, r.label), r.sub ? h('small', null, r.sub) : null), r.side ? h('span', { class: 'pside num' }, r.side) : null));
       if (!f.length && !(opt.add && q.value.trim())) list.appendChild(h('p', { class: 'empty' }, opt.empty || 'لا نتائج'));
     };
-    q.addEventListener('input', draw);
+    const first = () => { const bs = [...list.querySelectorAll('button')]; return bs.findIndex(b => !b.classList.contains('add')); };
+    q.addEventListener('input', () => { draw(); hl = first(); mark(); });
+    // لوحة المفاتيح: الأسهم للتنقل، وإدخال لاختيار المظلَّل (الأول افتراضياً)
+    let hl = 0;
+    const mark = () => [...list.querySelectorAll('button')].forEach((b, i) => { b.classList.toggle('hl', i === hl); if (i === hl) b.scrollIntoView({ block: 'nearest' }); });
+    q.addEventListener('keydown', e => {
+      const bs = [...list.querySelectorAll('button')];
+      if (e.key === 'ArrowDown') { e.preventDefault(); hl = Math.min(bs.length - 1, hl + 1); mark(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); hl = Math.max(0, hl - 1); mark(); }
+      else if (e.key === 'Enter' && bs[hl]) { e.preventDefault(); bs[hl].click(); }
+    });
     const s = sheet(title, h('div', null, q, list), { tall: true, onClose: () => { if (!done) res(null); } });
-    draw(); setTimeout(() => q.focus(), 250);
+    draw(); hl = first(); if (wide()) mark(); setTimeout(() => q.focus(), 250);
   });
 }
 

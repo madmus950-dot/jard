@@ -1,8 +1,8 @@
 /* فاتورة البيع والشراء والمرتجعات: مسح أو بحث ← سطر ← حفظ. المسودة تبقى محفوظة لو أُغلق التطبيق. */
-import { h, $, icon, toast, picker, numField, confirmBox, field, put } from './ui.js';
+import { h, $, icon, toast, picker, numField, confirmBox, field, put, wide } from './ui.js';
 import { money, price as fp, qty, num, today, parseExp, dmy } from './util.js';
-import { totals, check, STORES } from './engine.js';
-import { findBarcode, searchItems, units, stockOf, nearestExp, expTag, qtyText, cashAccounts, partyRows, partyFilter, partyName, avgCost, printVoucher } from './common.js';
+import { totals, check, STORES, partyBalance } from './engine.js';
+import { findBarcode, searchItems, units, stockOf, nearestExp, expTag, qtyText, cashAccounts, partyRows, partyFilter, partyName, avgCost, printVoucher, balWords } from './common.js';
 import { scanCode } from './scan.js';
 
 const META = {
@@ -73,7 +73,7 @@ export function docView(ctx, t) {
     }
     input.value = ''; sugg.classList.add('hide');
     change();
-    setTimeout(() => { const first = $('.line input.q', lines); if (isBuy && first) first.select(); }, 30);
+    setTimeout(() => { const first = $('input.q', lines); if (isBuy && first) first.select(); }, 30);
   }
   async function lookup(code) {
     const f = findBarcode(store, code);
@@ -128,11 +128,13 @@ export function docView(ctx, t) {
   /* ---------- سطور الفاتورة ---------- */
   function drawLines() {
     lines.textContent = '';
+    lines.className = 'page tight' + (wide() && D.ln.length ? ' glines' : '');
     if (!D.ln.length) {
       put(lines, h('div', { class: 'empty' }, h('p', null, isSale ? 'امسح الباركود أو ابحث بالاسم لإضافة صنف.' : 'أضف أصناف فاتورة المورد بالمسح أو البحث.')));
       return;
     }
     const L = store.L;
+    if (wide()) { gridLines(L); return; }
     D.ln.forEach((l, k) => {
       const it = store.items.get(l.i) || { id: l.i, n: l.n, u: [{ n: 'وحدة', s: l.z, p: l.p }] };
       const us = units(it), price = +l[P] || 0;
@@ -171,6 +173,51 @@ export function docView(ctx, t) {
     });
   }
 
+  /* سطور الفاتورة على الكمبيوتر: جدول بأعمدة ثابتة، كل خانة تُعدَّل في مكانها */
+  function gridLines(L) {
+    // المشتريات تُكتب من فاتورة المورد بلوحة المفاتيح: خانة كمية بلا أزرار لتتسع أعمدة البونص والصلاحية
+    const cols = ['22px', isBuy ? 'minmax(140px, 1fr)' : 'minmax(160px, 1fr)', isBuy ? '62px' : '116px', '84px', '88px'];
+    const heads = ['#', 'الصنف', 'الكمية', 'الوحدة', isSale ? 'السعر' : 'التكلفة'];
+    if (isBuy) { cols.push('54px', '70px'); heads.push('بونص', 'الصلاحية'); }
+    if (t === 'pur') { cols.push('82px'); heads.push('سعر البيع'); }
+    cols.push(isBuy ? '92px' : '104px', '28px'); heads.push('المبلغ', '');
+    lines.style.setProperty('--gcols', cols.join(' '));
+    put(lines, h('div', { class: 'gh' }, heads.map((x, i) => h('span', { class: i === heads.length - 2 ? 'n' : '' }, x))));
+    const n = D.ln.length;
+    D.ln.forEach((l, k) => {
+      const it = store.items.get(l.i) || { id: l.i, n: l.n, u: [{ n: 'وحدة', s: l.z, p: l.p }] };
+      const us = units(it), price = +l[P] || 0, amt = (+l.q || 0) * price, have = stockOf(L, l.i, l.s);
+      const cell = (attrs, w) => numField(Object.assign({ class: 'num cell', on: { focus: e => e.target.select() } }, attrs));
+      const qIn = numField({ class: 'q num', value: l.q, 'aria-label': 'الكمية', on: { change: e => { l.q = Math.max(0, num(e.target.value)); change(); }, focus: e => e.target.select() } });
+      const step = isBuy ? (qIn.classList.add('cell'), qIn) : h('span', { class: 'step' },
+        h('button', { type: 'button', tabindex: -1, 'aria-label': 'زيادة', on: { click: () => { l.q = (+l.q || 0) + 1; change(); } } }, icon('plus', 16)), qIn,
+        h('button', { type: 'button', tabindex: -1, 'aria-label': 'إنقاص', on: { click: () => { l.q = Math.max(0, (+l.q || 0) - 1); if (!l.q) D.ln.splice(k, 1); change(); } } }, icon('minus', 16)));
+      const unitSel = h('select', { class: 'cell', 'aria-label': 'الوحدة', on: { change: e => { const nu = +e.target.value, u = us[nu]; l.u = nu; l.z = u.s; if (P === 'p') l.p = +u.p || 0; else l.c = Math.round(avgCost(L, store, l.i) * u.s * 100) / 100; change(); } } },
+        us.map((u, j) => h('option', { value: j, selected: j === l.u }, u.n)));
+      const info = h('small', { class: 'gi' });
+      if (t === 'sale') {
+        const need = (+l.q || 0) * l.z;
+        put(info, h('span', { class: need > have + 1e-9 ? 'red' : '' }, 'المتوفر ' + qtyText(it, have)));
+        const x = nearestExp(L, l.i, l.s); if (x) put(info, expTag(x, D.d));
+        const cost = avgCost(L, store, l.i) * l.z;
+        if (ctx.can('profit') && cost && price < cost) put(info, h('span', { class: 'tag red' }, 'أقل من التكلفة ' + money(cost)));
+      } else put(info, h('span', null, 'المتوفر ' + qtyText(it, have)));
+      const row = h('div', { class: 'gl' },
+        h('span', { class: 'gn num' }, n - k),
+        h('span', { class: 'gname' }, h('b', { class: isLatinName(it.n || l.n) ? 'lat' : '' }, it.n || l.n), info),
+        step, unitSel,
+        cell({ value: price, 'aria-label': isSale ? 'السعر' : 'التكلفة', on: { change: e => { l[P] = Math.max(0, num(e.target.value)); change(); }, focus: e => e.target.select() } }));
+      if (isBuy) put(row,
+        cell({ value: l.f || '', placeholder: '0', 'aria-label': 'بونص', on: { change: e => { l.f = Math.max(0, num(e.target.value)); change(); }, focus: e => e.target.select() } }),
+        h('input', { class: 'num cell', value: l.x || '', placeholder: 'شهر/سنة', inputmode: 'numeric', 'aria-label': 'الصلاحية', on: { change: e => { l.x = parseExp(e.target.value); if (e.target.value && !l.x) toast('اكتب الصلاحية شهر/سنة مثل 03/28', { bad: true }); change(); } } }));
+      if (t === 'pur') { const cur = (us[l.u] || {}).p || 0; put(row, cell({ value: l.np != null ? l.np : cur, 'aria-label': 'سعر البيع', on: { change: e => { const v = num(e.target.value); l.np = v === cur ? undefined : v; change(); }, focus: e => e.target.select() } })); }
+      put(row, h('span', { class: 'gamt num' }, money(amt)),
+        h('button', { type: 'button', class: 'gdel', tabindex: -1, 'aria-label': 'حذف السطر', title: 'حذف', on: { click: () => { D.ln.splice(k, 1); change(); } } }, icon('x', 17)));
+      put(lines, row);
+    });
+  }
+  const isLatinName = x => !/[\u0600-\u06FF]/.test(String(x || ''));
+
   /* ---------- الإجمالي والحفظ ---------- */
   function draft() {
     const v = { t, d: D.d, ca: D.ca, ln: D.ln.filter(l => (+l.q || 0) > 0 || (+l.f || 0) > 0).map(l => clean(l)), ds: Math.max(0, num(D.ds)), m: (D.m || '').trim() };
@@ -200,11 +247,29 @@ export function docView(ctx, t) {
       h('div', { class: D.pay === 'credit' ? 'row2' : '', style: { marginBottom: '8px' } },
         h('label', { class: 'mini', style: { width: '100%' } }, 'خصم', ds),
         D.pay === 'credit' ? h('label', { class: 'mini', style: { width: '100%' } }, 'المدفوع', pd) : null),
+      wide() ? panelInfo(tt) : null,
       h('div', { class: 'actions' },
         h('button', { class: 'btn', disabled: !n, on: { click: save } }, icon('check', 20), M.saved.replace('حُفظت', 'حفظ').replace('حُفظ', 'حفظ')),
         n ? h('button', { class: 'btn ghost sm', style: { flex: '0 0 auto' }, on: { click: clearAll } }, 'تفريغ') : null),
       h('p', { class: 'keys' }, 'F9 حفظ، F4 ' + M.who + '، F8 نقداً أو آجل، F2 فاتورة بيع جديدة، Esc مسح البحث، والأسهم للتنقل في نتائج البحث.')));
     ds.style.width = '100%'; pd.style.width = '100%';
+  }
+  /* لوحة الكمبيوتر: رصيد العميل أو المورد، والمستلم والباقي في البيع النقدي (للعرض فقط، لا يُحفظ) */
+  let cashIn = '';
+  function panelInfo(tt) {
+    const box = h('div', { class: 'pinfo' });
+    if (D.pt && store.parties.get(D.pt)) {
+      const p = store.parties.get(D.pt), b = partyBalance(store.L, D.pt), w = balWords(b, p.t);
+      put(box, h('div', { class: 'pl' }, h('span', null, 'رصيد ' + (p.n || '')), h('b', { class: 'num ' + w.cls }, w.amt ? money(w.amt) + ' ' : '', h('small', null, w.txt))));
+    }
+    if (t === 'sale' && D.pay === 'cash' && tt.tot > 0) {
+      const rest = h('b', { class: 'num' }, '');
+      const upd = () => { const r = num(cashIn) - tt.tot; rest.textContent = cashIn === '' ? '' : money(Math.abs(r)) + (r < -0.004 ? ' ناقص' : ''); rest.className = 'num ' + (r < -0.004 ? 'red' : 'green'); };
+      const inp = numField({ value: cashIn, placeholder: money(tt.tot), 'aria-label': 'المستلم من الزبون', on: { input: e => { cashIn = e.target.value; upd(); }, focus: e => e.target.select() } });
+      put(box, h('label', { class: 'mini pl' }, 'المستلم من الزبون', inp), h('div', { class: 'pl' }, h('span', null, 'الباقي له'), rest));
+      upd();
+    }
+    return box.childNodes.length ? box : null;
   }
   async function clearAll() { if (await confirmBox('تفريغ الفاتورة', 'تُحذف كل السطور من هذه المسودة.', 'تفريغ', true)) { drafts[t] = D = fresh(t); change(); } }
 
@@ -227,7 +292,7 @@ export function docView(ctx, t) {
         const it = store.items.get(l.i), us = units(it).map(u => Object.assign({}, u));
         if (us[l.u]) { const ratio = (+l.np || 0) / (+us[l.u].p || 1); us[l.u].p = +l.np; us.forEach((u, j) => { if (j !== l.u && us[l.u].p && u.p) u.p = Math.round(u.p * ratio); }); await store.put('items', it.id, Object.assign({}, it, { u: us })); }
       }
-      drafts[t] = D = fresh(t); persist(D);
+      drafts[t] = D = fresh(t); persist(D); cashIn = '';
       toast(M.saved + ' ' + doc.no, { action: { label: 'طباعة', fn: () => printVoucher(store, doc) } });
       change();
       input.focus();

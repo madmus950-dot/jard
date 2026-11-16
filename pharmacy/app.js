@@ -85,9 +85,10 @@ async function enter(user) {
 /* ---------- التنقل ---------- */
 const ROUTES = [
   [/^$/, () => home(ctx), { root: 'home' }],
-  [/^sale$/, () => docView(ctx, 'sale'), { form: true }],
-  [/^doc\/(sret|pur|pret)$/, m => docView(ctx, m[1]), { form: true }],
-  [/^v\/(rcpt|pay|exp|cxf|jv|adj|xfer)(?:\/(.+))?$/, m => vchView(ctx, m[1], m[2]), { form: true }],
+  [/^sale$/, () => docView(ctx, 'sale'), { form: true, grid: true }],
+  [/^doc\/(sret|pur|pret)$/, m => docView(ctx, m[1]), { form: true, grid: true }],
+  [/^v\/(adj|xfer)(?:\/(.+))?$/, m => vchView(ctx, m[1], m[2]), { form: true, grid: true }],
+  [/^v\/(rcpt|pay|exp|cxf|jv)(?:\/(.+))?$/, m => vchView(ctx, m[1], m[2]), { form: true }],
   [/^parties(?:\/([csoe]))?$/, m => partiesView(ctx, m[1] || 'c'), { root: 'parties' }],
   [/^party\/([^/]+)$/, m => partyView(ctx, decodeURIComponent(m[1]))],
   [/^party-edit(?:\/([^/]*))?(?:\/([csoe]))?$/, m => partyEdit(ctx, decodeURIComponent(m[1] || ''), m[2]), { form: true }],
@@ -99,8 +100,8 @@ const ROUTES = [
   [/^r\/(\w+)$/, m => reportView(ctx, m[1])],
   [/^vouchers$/, () => vouchersView(ctx)],
   [/^vch\/([^/]+)$/, m => voucherView(ctx, decodeURIComponent(m[1]))],
-  [/^settings$/, () => settingsView(ctx)],
-  [/^import$/, () => importView(ctx)]
+  [/^settings$/, () => settingsView(ctx), { narrow: true }],
+  [/^import$/, () => importView(ctx), { narrow: true }]
 ];
 function route() {
   const path = location.hash.replace(/^#\/?/, '');
@@ -117,7 +118,7 @@ function draw(keepScroll) {
   try { v = cur.make(); }
   catch (e) { console.error(e); v = { title: 'خطأ', el: h('div', { class: 'note bad' }, 'تعذّر عرض الصفحة: ' + (e.message || e)) }; }
   cur.v = v;
-  app.className = cur.opt.form ? 'form' : '';
+  app.className = [cur.opt.form ? 'form' : '', cur.opt.grid ? 'grid' : '', cur.opt.narrow ? 'narrow' : ''].filter(Boolean).join(' ');
   app.textContent = '';
   app.appendChild(bar(v));
   app.appendChild(h('main', null, v.el));
@@ -146,6 +147,7 @@ function syncChip() {
   el.className = 'sync ' + cls + (el.classList.contains('dot') ? ' dot' : ''); el.lastChild.textContent = txt; el.title = txt;
 }
 function nav(on) {
+  if (WIDE.matches) return sideNav();
   const b = (id, label, ic, path, cls) => h('button', { class: (on === id ? 'on ' : '') + (cls || ''), on: { click: () => ctx.go(path) } }, icon(ic, 23), h('span', null, label));
   return h('nav', { class: 'nav' }, h('div', null,
     b('home', 'اليوم', 'today', ''),
@@ -153,6 +155,42 @@ function nav(on) {
     ctx.can('sale') ? b('sale', 'بيع', 'sale', 'sale', 'sell') : null,
     b('items', 'الأصناف', 'pill', 'items'),
     b('more', 'المزيد', 'more', 'more')));
+}
+/* الكمبيوتر: قائمة جانبية كاملة بدل الشريط السفلي، فيظهر النظام كله بنقرة واحدة */
+function navKey(p) {
+  let m;
+  if (!p) return 'home';
+  if (p === 'sale') return 'sale';
+  if ((m = p.match(/^doc\/(\w+)/))) return m[1];
+  if ((m = p.match(/^v\/(\w+)/))) return ['rcpt', 'pay', 'exp'].includes(m[1]) ? m[1] : 'more';
+  if (/^part/.test(p)) return 'parties';
+  if (/^item/.test(p)) return 'items';
+  if (/^(vouchers|vch\/)/.test(p)) return 'vouchers';
+  if (/^(reports|r\/)/.test(p)) return 'reports';
+  return 'more';
+}
+function sideNav() {
+  const on = navKey(cur.path), S = store.settings || {};
+  const a = (k, label, ic, path, ok, kbd) => ok === false ? null : h('a', { class: 'si' + (on === k ? ' on' : ''), href: '#/' + path, 'aria-current': on === k ? 'page' : null }, icon(ic, 19), h('span', null, label), kbd ? h('kbd', null, kbd) : null);
+  const g = (label, ...items) => { items = items.filter(Boolean); return items.length ? h('div', { class: 'sg' }, h('div', { class: 'sgl' }, label), ...items) : null; };
+  return h('nav', { class: 'nav side', 'aria-label': 'القائمة' },
+    h('div', { class: 'sh' }, h('b', null, S.name || 'حسابات الصيدلية'), h('small', null, ctx.user.name + '، ' + (ctx.user.role === 'admin' ? 'مشرف' : 'كاشير'))),
+    ctx.can('sale') ? h('a', { class: 'si sell' + (on === 'sale' ? ' on' : ''), href: '#/sale' }, icon('sale', 20), h('span', null, 'فاتورة بيع'), h('kbd', null, 'F2')) : null,
+    a('home', 'اليوم', 'today', ''),
+    g('المستندات',
+      a('sret', 'مرتجع مبيعات', 'undo', 'doc/sret', ctx.can('sret')),
+      a('pur', 'فاتورة شراء', 'in', 'doc/pur', ctx.can('pur')),
+      a('pret', 'مرتجع مشتريات', 'out', 'doc/pret', ctx.can('pret'))),
+    g('النقدية',
+      a('rcpt', 'سند قبض', 'wallet', 'v/rcpt', ctx.can('rcpt')),
+      a('pay', 'سند صرف', 'out', 'v/pay', ctx.can('pay')),
+      a('exp', 'مصروف', 'bolt', 'v/exp', ctx.can('exp'))),
+    g('الدفاتر',
+      a('parties', 'العملاء والموردون', 'people', 'parties'),
+      a('items', 'الأصناف والمخزون', 'pill', 'items'),
+      a('vouchers', 'كل السندات', 'doc', 'vouchers'),
+      a('reports', 'التقارير', 'report', 'reports')),
+    h('div', { class: 'sfoot' }, a('more', 'أدوات وإعدادات', 'gear', 'more')));
 }
 setInterval(() => syncChip(), 2000);
 

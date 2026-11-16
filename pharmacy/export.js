@@ -13,7 +13,7 @@
  *   presets: [{ label, cols: [[k, t], ...] }]
  * })
  */
-import { h, icon, toast, sheet, put } from './ui.js';
+import { h, icon, toast, sheet, put, wide } from './ui.js';
 import { money, qty, dmy, today } from './util.js';
 import { saveXlsx, saveBlob, printHtml } from './out.js';
 
@@ -138,14 +138,14 @@ export function openExport(o) {
 
   const body = h('div', null,
     count,
-    h('div', { class: 'xgrid' },
+    h('div', { class: 'xgrid xmain' },
       h('button', { class: 'btn', on: { click: doPrint } }, icon('print', 20), 'طباعة A4'),
       h('button', { class: 'btn ghost', on: { click: doXlsx } }, 'تنزيل Excel'),
       h('button', { class: 'btn ghost', on: { click: doCsv } }, 'تنزيل CSV'),
       h('button', { class: 'btn ghost', on: { click: doCopy } }, 'نسخ للصق'),
       o.receipt ? h('button', { class: 'btn ghost', style: { gridColumn: '1 / -1' }, on: { click: o.receipt } }, 'طباعة إيصال صغير (طابعة الفواتير)') : null),
     msg,
-    h('details', { class: 'colset' },
+    h('details', { class: 'colset', open: wide() },
       h('summary', null, 'إعداد الأعمدة'),
       h('p', { class: 'muted', style: { fontSize: '13.5px', margin: '8px 2px' } }, 'اختر الأعمدة وأسماءها وترتيبها. يُحفظ الإعداد لهذا النوع من الجداول.'),
       (o.presets && o.presets.length) ? h('div', { class: 'xgrid' }, o.presets.map(p => h('button', { class: 'btn ghost sm', on: { click: () => applyPreset(p) } }, p.label))) : null,
@@ -154,5 +154,5 @@ export function openExport(o) {
       colsBox,
       h('button', { class: 'btn ghost sm', style: { marginTop: '8px' }, on: { click: reset } }, 'إرجاع الأعمدة الافتراضية')));
   drawCols(); updCount();
-  sheet('تصدير وطباعة: ' + (o.title || ''), body, { tall: true });
+  sheet('تصدير وطباعة: ' + (o.title || ''), body, { tall: !wide(), cls: 'xsheet' });
 }

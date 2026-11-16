@@ -1,5 +1,5 @@
 /* المزيد: المستندات، السجل، تفاصيل السند، الإعدادات، الاستيراد */
-import { h, icon, toast, field, numField, seg, confirmBox, sheet, put } from './ui.js';
+import { h, icon, toast, field, numField, seg, confirmBox, sheet, put, wide } from './ui.js';
 import { money, price, qty, norm, dmy, today, num, r2, newId } from './util.js';
 import { totals, check, TYPES, STORES, PARTY_TYPES, describe } from './engine.js';
 import { typeName, voucherLine, partyName, units, printVoucher, cashAccounts, exportVoucher } from './common.js';
@@ -31,7 +31,7 @@ export function moreView(ctx) {
       h('section', { class: 'page tight' },
         it('settings', 'الإعدادات', 'اسم الصيدلية، الصناديق، المصروفات، المستخدمون، قفل الفترة', 'gear', 'settings'),
         it('import', 'الأرصدة الافتتاحية', 'استيراد الأصناف والأسماء والأرصدة', 'in', 'import'),
-        h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, ctx.user.name), h('small', null, (ctx.user.role === 'admin' ? 'مشرف' : 'كاشير') + '، ' + ctx.user.email)),
+        h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, ctx.user.name), h('small', null, (ctx.user.role === 'admin' ? 'مشرف' : 'كاشير') + '، ', h('bdi', null, ctx.user.email))),
           h('button', { class: 'btn ghost sm', on: { click: async () => { if (ctx.store.status.pending && !(await confirmBox('سندات لم تُرفع', ctx.store.status.pending + ' سند لم يصل الخادم بعد. إن خرجت الآن تبقى على هذا الجهاز وتُرفع عند دخولك ثانية. اخرج؟', 'خروج'))) return; ctx.logout(); } } }, 'خروج'))),
       h('p', { class: 'muted', style: { fontSize: '12.5px', textAlign: 'center', marginTop: '16px' } },
         (S.name || 'الصيدلية') + '، الحسابات محسوبة من ' + ctx.store.vouchers.size + ' سنداً في ' + (ctx.store.L.ms || 0) + ' ملّي ثانية' + (window.JardApp && window.JardApp.version ? '، نسخة ' + window.JardApp.version() : '')))
@@ -79,6 +79,22 @@ export function voucherView(ctx, id) {
     return h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, l.n || it.n), h('small', null, [qty(l.q) + ' ' + (u.n || '') + (l.f ? ' + بونص ' + qty(l.f) : ''), price != null ? '× ' + fpx(price) : '', l.x ? 'صلاحية ' + l.x : '', l.s2 ? STORES[l.s] + ' ← ' + STORES[l.s2] : STORES[l.s || 1]].filter(Boolean).join('، '))),
       price != null ? h('span', { class: 'v num', style: { fontSize: '15px' } }, money((+l.q || 0) * price)) : null);
   });
+  // على الكمبيوتر: السطور جدول بأعمدة
+  const anyF = (v.ln || []).some(l => +l.f), anyX = (v.ln || []).some(l => l.x), anyS = (v.ln || []).some(l => l.s2 || (l.s && l.s !== 1));
+  const linesTable = () => h('table', { class: 'stmt vlines' },
+    h('thead', null, h('tr', null, h('th', { class: 'i' }, '#'), h('th', null, 'الصنف'), h('th', { class: 'n' }, 'الكمية'), h('th', null, 'الوحدة'),
+      anyF ? h('th', { class: 'n' }, 'بونص') : null, h('th', { class: 'n' }, isBuy || v.t === 'open' ? 'التكلفة' : 'السعر'),
+      anyX ? h('th', null, 'الصلاحية') : null, anyS ? h('th', null, 'المخزن') : null, h('th', { class: 'n' }, 'المبلغ'))),
+    h('tbody', null, (v.ln || []).map((l, i) => {
+      const it = store.items.get(l.i) || {}, u = (it.u || [])[l.u] || {};
+      const pr = isBuy ? l.c : v.t === 'open' ? l.c : l.p;
+      return h('tr', { on: it.id ? { click: () => ctx.go('item/' + encodeURIComponent(it.id)) } : null },
+        h('td', { class: 'i num' }, i + 1), h('td', null, l.n || it.n), h('td', { class: 'n num' }, qty(l.q)), h('td', null, u.n || ''),
+        anyF ? h('td', { class: 'n num' }, +l.f ? qty(l.f) : '') : null, h('td', { class: 'n num' }, pr != null ? fpx(pr) : ''),
+        anyX ? h('td', { class: 'num', style: { textAlign: 'right' } }, l.x || '') : null,
+        anyS ? h('td', null, l.s2 ? STORES[l.s] + ' ← ' + STORES[l.s2] : STORES[l.s || 1]) : null,
+        h('td', { class: 'n num' }, pr != null ? money((+l.q || 0) * pr) : ''));
+    })));
   const posts = L.post.filter(e => e.v.id === id);
   const who = v.pt ? partyName(store, v.pt) : v.ac ? (store.accounts.get(v.ac) || {}).n : '';
   const locked = store.settings.lock && v.d <= store.settings.lock;
@@ -95,14 +111,14 @@ export function voucherView(ctx, id) {
       v.st === 'void' ? h('div', { class: 'note bad' }, 'ملغى' + (v.vd ? ' بواسطة ' + (v.vd.bn || '') + (v.vd.why ? '، السبب: ' + v.vd.why : '') : '')) : null,
       h('section', { class: 'page' },
         h('div', { class: 'ph' }, h('h2', null, typeName(v.t) + ' ' + (v.no || '')), h('div', { class: 'meta' }, [dmy(v.d), who, v.inv ? 'فاتورة المورد ' + v.inv : ''].filter(Boolean).join('، '))),
-        ...lines,
+        ...(wide() && lines.length ? [linesTable()] : lines),
         tt.ds ? row('الخصم', h('span', { class: 'num' }, money(tt.ds))) : null,
         row(v.t === 'open' ? 'رأس المال الناتج' : 'الإجمالي', h('span', { class: 'num' }, money(v.t === 'open' || v.t === 'adj' ? meta.tot || 0 : tt.tot))),
         ['sale', 'sret', 'pur', 'pret'].includes(v.t) ? row('المدفوع نقداً', h('span', { class: 'num' }, money(tt.pd))) : null,
         tt.credit > 0.004 && ['sale', 'sret', 'pur', 'pret'].includes(v.t) ? row('آجل', h('span', { class: 'num' }, money(tt.credit)), 'amber') : null,
         ctx.can('profit') && v.t === 'sale' ? row('ربح الفاتورة', h('span', { class: 'num' }, money(meta.gp || 0)), (meta.gp || 0) < 0 ? 'red' : 'green') : null,
         v.m ? row('البيان', v.m) : null,
-        row('أدخله', (v.bn || '') + '، ' + when(v.at))),
+        row('أدخله', [v.bn || '', v.at > 1e11 ? when(v.at) : 'مستورد من BetaSys'].filter(Boolean).join('، '))),
       posts.length && ctx.can('profit') ? h('h3', { class: 'sect' }, 'القيد المحاسبي') : null,
       posts.length && ctx.can('profit') ? h('section', { class: 'page tight' }, h('table', { class: 'stmt' },
         h('thead', null, h('tr', null, h('th', null, 'الحساب'), h('th', { class: 'n' }, 'مدين'), h('th', { class: 'n' }, 'دائن'))),
@@ -134,7 +150,7 @@ export function settingsView(ctx) {
     users.textContent = '';
     for (const u of list) {
       const role = u.acc || (u.role === 'admin' ? 'admin' : '');
-      put(users, h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, u.name || u.id), h('small', null, u.id)),
+      put(users, h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, u.name || u.id), h('small', null, h('bdi', null, u.id))),
         h('select', { style: { width: 'auto' }, disabled: u.id === ctx.user.email, on: { change: async e => { try { await be.setStaff(u.id, { acc: e.target.value }); toast('حُفظت صلاحية ' + (u.name || u.id)); } catch (x) { toast('تعذّر: ' + (x.code || x.message) + '. حدّث قواعد Firestore.', { bad: true }); } } } },
           [['', 'لا يدخل الحسابات'], ['cashier', 'كاشير'], ['admin', 'مشرف']].map(([v, l]) => h('option', { value: v, selected: role === v }, l)))));
     }

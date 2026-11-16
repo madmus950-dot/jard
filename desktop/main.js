@@ -17,6 +17,9 @@ const MIME = {
 };
 let win = null;
 
+// التواريخ يوم/شهر/سنة بأرقام إنجليزية كما في الفواتير، مهما كانت لغة ويندوز
+app.commandLine.appendSwitch('lang', 'en-GB');
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {

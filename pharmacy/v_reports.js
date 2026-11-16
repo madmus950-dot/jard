@@ -34,7 +34,7 @@ function tableEl(cols, rows, foot) {
     h('tbody', null, rows.map(r => h('tr', { on: r._go ? { click: r._go } : null }, cols.map((c, i) => h('td', { class: (c.n ? 'n num' : '') + (c.d ? ' d' : '') + (r._cls && r._cls[i] ? ' ' + r._cls[i] : '') }, fmt(r[i], c))))),
       foot ? h('tr', { class: 'close' }, cols.map((c, i) => h('td', { class: c.n ? 'n num' : '' }, fmt(foot[i], c)))) : null));
 }
-function fmt(v, c) { if (v === '' || v == null) return ''; if (c.n === 'q') return qty(v); if (c.n) return money(v); if (c.d) return dmy(v); return String(v); }
+function fmt(v, c) { if (v === '' || v == null) return ''; if (typeof v === 'string' && !/^-?\d/.test(v)) return v; if (c.n === 'q') return qty(v); if (c.n) return money(v); if (c.d) return /^\d{4}-\d{2}-\d{2}$/.test(v) ? dmy(v) : String(v); return String(v); }
 
 function frame(ctx, k, title, opts, content) {
   const typed = rows => (t, i) => {
