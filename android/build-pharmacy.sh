@@ -12,7 +12,7 @@ T=$(mktemp -d)
     firebase@10.14.1 @zxing/library@0.21.3 esbuild@0.24.2 @fontsource/ibm-plex-sans-arabic@5 @fontsource/noto-naskh-arabic@5 )
 
 # ملفات التطبيق (بلا الاختبارات وبلا الخادم الوهمي)
-for f in pharmacy/*.js pharmacy/*.css pharmacy/index.html; do
+for f in pharmacy/*.js pharmacy/*.css pharmacy/index.html pharmacy/*.jpg; do
   case "$f" in pharmacy/mock.js) continue ;; esac
   cp "$f" "$W/"
 done

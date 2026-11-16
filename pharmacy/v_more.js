@@ -33,7 +33,8 @@ export function moreView(ctx) {
         it('import', 'الأرصدة الافتتاحية', 'استيراد الأصناف والأسماء والأرصدة', 'in', 'import'),
         h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, ctx.user.name), h('small', null, (ctx.user.role === 'admin' ? 'مشرف' : 'كاشير') + '، ', h('bdi', null, ctx.user.email))),
           h('button', { class: 'btn ghost sm', on: { click: async () => { if (ctx.store.status.pending && !(await confirmBox('سندات لم تُرفع', ctx.store.status.pending + ' سند لم يصل الخادم بعد. إن خرجت الآن تبقى على هذا الجهاز وتُرفع عند دخولك ثانية. اخرج؟', 'خروج'))) return; ctx.logout(); } } }, 'خروج'))),
-      h('p', { class: 'muted', style: { fontSize: '12.5px', textAlign: 'center', marginTop: '16px' } },
+      h('p', { class: 'muted', style: { fontSize: '12.5px', textAlign: 'center', margin: '18px 0 2px' } }, 'نظام إدارة الصيدليات، تطوير وبرمجة MOSMAD'),
+      h('p', { class: 'muted', style: { fontSize: '12.5px', textAlign: 'center', marginTop: '0' } },
         (S.name || 'الصيدلية') + '، الحسابات محسوبة من ' + ctx.store.vouchers.size + ' سنداً في ' + (ctx.store.L.ms || 0) + ' ملّي ثانية' + (window.JardApp && window.JardApp.version ? '، نسخة ' + window.JardApp.version() : '')))
   };
 }
@@ -45,7 +46,8 @@ export function vouchersView(ctx) {
   const { store } = ctx;
   const g = GROUPS.find(x => x[0] === VF.g);
   const n = norm(VF.q);
-  let list = [...store.vouchers.values()].filter(v => (!g[2] || g[2].includes(v.t)) && (!n || norm([v.no, typeName(v.t), partyName(store, v.pt), v.m, v.inv].join(' ')).includes(n)));
+  const mine = ctx.can('sup') ? null : ['sale', 'sret', 'pur', 'rcpt'];
+  let list = [...store.vouchers.values()].filter(v => (!mine || mine.includes(v.t)) && (!g[2] || g[2].includes(v.t)) && (!n || norm([v.no, typeName(v.t), partyName(store, v.pt), v.m, v.inv].join(' ')).includes(n)));
   list.sort((a, b) => (b.d + b.at) > (a.d + a.at) ? 1 : -1);
   const box = h('section', { class: 'page tight' });
   let lastD = '';
@@ -58,7 +60,7 @@ export function vouchersView(ctx) {
     title: 'كل السندات', sub: list.length + ' سند', live: true,
     el: h('div', null,
       h('input', { type: 'search', value: VF.q, placeholder: 'رقم السند أو الاسم أو البيان', on: { change: e => { VF.q = e.target.value; ctx.redraw(); } } }),
-      h('div', { class: 'chips', style: { marginTop: '10px' } }, GROUPS.map(([k, l]) => h('button', { class: 'chip' + (VF.g === k ? ' set' : ''), on: { click: () => { VF.g = k; ctx.redraw(); } } }, l))),
+      h('div', { class: 'chips', style: { marginTop: '10px' } }, GROUPS.filter(x => ctx.can('sup') || x[0] !== 'i').map(([k, l]) => h('button', { class: 'chip' + (VF.g === k ? ' set' : ''), on: { click: () => { VF.g = k; ctx.redraw(); } } }, l))),
       box,
       list.length > VF.n ? h('button', { class: 'btn ghost wide', on: { click: () => { VF.n += 200; ctx.redraw(); } } }, 'عرض المزيد') : null)
   };
@@ -70,6 +72,7 @@ function when(t) { const d = new Date(t || 0), hh = d.getHours(), mm = String(d.
 export function voucherView(ctx, id) {
   const { store } = ctx, v = store.vouchers.get(id);
   if (!v) return { title: 'السند', el: h('div', { class: 'note bad' }, 'السند غير موجود.') };
+  if (!ctx.can('sup') && !['sale', 'sret', 'pur', 'rcpt'].includes(v.t)) return { title: typeName(v.t) + ' ' + (v.no || ''), el: h('div', { class: 'note bad' }, 'هذا السند للمشرف فقط.') };
   const tt = totals(v), L = store.L, meta = L.vm.get(id) || {};
   const isBuy = v.t === 'pur' || v.t === 'pret';
   const row = (k, val, cls) => h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, k)), h('span', { class: 'v ' + (cls || ''), style: { fontSize: '16px' } }, val));

@@ -3,7 +3,7 @@ import { h, icon, toast, field, numField, confirmBox, put, isLatin } from './ui.
 import { money, price, qty, norm, dmy, today, addDays, monthsLeft, expKey, num, r2 } from './util.js';
 import { STORES, TYPES } from './engine.js';
 import { units, stockOf, qtyText, expTag, avgCost, partyName, typeName, searchItems, nearestExp } from './common.js';
-import { scanCode } from './scan.js';
+import { scanButton } from './scan.js';
 import { openExport } from './export.js';
 
 const F = { q: '', f: 'all' };
@@ -40,10 +40,10 @@ export function itemsView(ctx) {
   }
   draw();
   return {
-    title: 'الأصناف', sub: all.length + ' صنف', live: true,
+    title: 'الأصناف', sub: all.length + ' صنف', live: true, scanInput: q,
     actions: [
       h('button', { class: 'iconbtn', 'aria-label': 'تصدير قاعدة الأصناف', on: { click: () => exportItems(ctx, all.filter(match)) } }, icon('print')),
-      h('button', { class: 'iconbtn', 'aria-label': 'مسح باركود', on: { click: async () => { const c = await scanCode(); if (c) { F.q = c; ctx.redraw(); } } } }, icon('barcode')),
+      scanButton(c => { F.q = c; ctx.redraw(); }, q),
       ctx.can('item-add') ? h('a', { class: 'iconbtn', href: '#/item-edit/', 'aria-label': 'صنف جديد' }, icon('plus')) : null],
     el: h('div', null, q,
       h('div', { class: 'chips', style: { marginTop: '10px' } }, FILTERS.map(([k, l]) => h('button', { class: 'chip' + (F.f === k ? ' set' : ''), on: { click: () => { F.f = k; ctx.redraw(); } } }, l))),

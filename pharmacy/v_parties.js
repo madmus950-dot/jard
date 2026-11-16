@@ -11,6 +11,8 @@ const view = { q: '', sort: 'bal' };
 
 export function partiesView(ctx, type) {
   const { store } = ctx, L = store.L;
+  if (!ctx.can('sup')) type = 'c';   // الكاشير: العملاء فقط؛ أرصدة الموردين والموظفين للمشرف
+  const tabs = ctx.can('sup') ? TABS : TABS.slice(0, 1);
   const rows = [];
   let total = 0;
   for (const p of store.parties.values()) {
@@ -40,14 +42,14 @@ export function partiesView(ctx, type) {
   draw();
   const tw = balWords(total, type);
   return {
-    title: 'الحسابات', live: true,
+    title: ctx.can('sup') ? 'الحسابات' : 'العملاء', live: true,
     actions: [h('button', { class: 'iconbtn', 'aria-label': 'تصدير', on: { click: () => openExport({ id: 'parties', title: TABS.find(x => x[0] === type)[1], file: TABS.find(x => x[0] === type)[1], sheet: 'الأرصدة', settings: store.settings, head: ['حتى ' + dmy(today())],
         cols: [{ k: 'n', t: 'الاسم', f: '' }, { k: 'ph', t: 'الهاتف', f: '' }, { k: 'dr', t: 'عليه (لنا)', f: 'n' }, { k: 'cr', t: 'له (علينا)', f: 'n' }, { k: 'last', t: 'آخر حركة', f: 'd' }, { k: 'lp', t: 'آخر سداد', f: 'd', on: false }],
         rows: rows.slice().sort((a, b) => b.b - a.b).map(x => ({ n: x.p.n, ph: x.p.ph || '', dr: x.b > 0.004 ? x.b : '', cr: x.b < -0.004 ? -x.b : '', last: x.last, lp: x.lastPay })),
         totals: [['مجموع ما لنا', rows.reduce((s, x) => s + (x.b > 0 ? x.b : 0), 0)], ['مجموع ما علينا', rows.reduce((s, x) => s + (x.b < 0 ? -x.b : 0), 0)]] }) } }, icon('print')),
       ctx.can('party-add') ? h('a', { class: 'iconbtn', href: '#/party-edit//' + type, 'aria-label': 'إضافة اسم' }, icon('plus')) : null],
     el: h('div', null,
-      seg(TABS, type, v => ctx.go('parties/' + v, true)),
+      tabs.length > 1 ? seg(tabs, type, v => ctx.go('parties/' + v, true)) : null,
       h('div', { class: 'ln', style: { borderBottom: 0, padding: '14px 4px 6px' } },
         h('span', { class: 'k' }, h('b', null, type === 's' ? 'مجموع ما علينا' : type === 'c' ? 'مجموع ما لنا' : 'الصافي'), h('small', null, rows.length + ' اسم')),
         h('span', { class: 'v num' }, money(tw.amt), ' ', h('small', null, tw.txt))),
@@ -62,6 +64,7 @@ const stState = { per: 'y' };
 export function partyView(ctx, id) {
   const { store } = ctx, p = store.parties.get(id);
   if (!p) return { title: 'الحساب', el: h('div', { class: 'note bad' }, 'الاسم غير موجود.') };
+  if (p.t !== 'c' && !ctx.can('sup')) return { title: p.n, el: h('div', { class: 'note bad' }, 'كشف حساب الموردين والموظفين للمشرف فقط.') };
   const L = store.L;
   const [from, to] = periodRange(stState.per);
   const st = statement(L, { p: id, from, to });

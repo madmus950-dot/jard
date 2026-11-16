@@ -30,7 +30,7 @@ export function home(ctx) {
     row('مبيعات اليوم', day.n ? (day.n + ' فاتورة، نقداً ' + money(day.cash) + '، آجل ' + money(day.credit)) : 'لا فواتير بعد', money(day.sales - day.ret), 'r/daily', '', true),
     row('في الصندوق', cashAccounts(store).length > 1 ? cashAccounts(store).length + ' صناديق' : '', money(cash), 'r/cash'),
     row('لنا عند العملاء', nRecv ? nRecv + ' عميل عليه رصيد' : '', money(recv), 'parties/c'),
-    row('علينا للموردين', '', money(pay), 'parties/s', pay ? 'amber' : ''),
+    ctx.can('sup') ? row('علينا للموردين', '', money(pay), 'parties/s', pay ? 'amber' : '') : null,
     row('أصناف منتهية الصلاحية', expd ? 'أخرجها من الرفوف' : '', String(expd), 'r/expiry', expd ? 'red' : ''),
     row('تنتهي خلال 3 أشهر', '', String(soon), 'r/expiry', soon ? 'amber' : ''),
     row('نفدت وكانت تُباع', '', String(out), 'r/short', out ? 'amber' : ''));
@@ -42,7 +42,8 @@ export function home(ctx) {
     q('سند قبض', 'wallet', 'v/rcpt', ctx.can('rcpt')),
     ctx.can('exp') ? q('مصروف', 'out', 'v/exp', true) : q('مرتجع', 'undo', 'doc/sret', ctx.can('sret')));
 
-  const recent = [...store.vouchers.values()].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 8);
+  const mine = ctx.can('sup') ? null : ['sale', 'sret', 'pur', 'rcpt'];   // الكاشير يرى مستنداته فقط، لا مدفوعات الموردين
+  const recent = [...store.vouchers.values()].filter(v => !mine || mine.includes(v.t)).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 8);
   const first = !store.vouchers.size;
   const denied = store.status.error === 'permission-denied';
   return {

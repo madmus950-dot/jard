@@ -13,7 +13,7 @@ const ROOT = path.join(__dirname, 'www');
 const ORIGIN = 'http://127.0.0.1:' + PORT;
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
+  '.json': 'application/json; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
 };
 let win = null;
 
@@ -61,6 +61,12 @@ async function start() {
     return;
   }
   Menu.setApplicationMenu(null);
+  // الكاميرا (لمسح الباركود بكاميرا اللابتوب) والحافظة لواجهة البرنامج فقط؛ باقي الأذونات مرفوضة
+  const { session } = require('electron');
+  const ALLOW = new Set(['media', 'clipboard-read', 'clipboard-sanitized-write', 'fullscreen']);
+  const ours = u => String(u || '').startsWith(ORIGIN + '/');
+  session.defaultSession.setPermissionRequestHandler((wc, perm, cb, d) => cb(ALLOW.has(perm) && ours((d && d.requestingUrl) || wc.getURL())));
+  session.defaultSession.setPermissionCheckHandler((wc, perm, origin) => ALLOW.has(perm) && String(origin || '').startsWith(ORIGIN));
   win = new BrowserWindow({
     width: 1366, height: 820, minWidth: 900, minHeight: 600, show: false,
     backgroundColor: '#f2f5f3', title: 'حسابات الصيدلية', icon: path.join(__dirname, 'icon.png'),

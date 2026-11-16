@@ -29,16 +29,41 @@ function beep() {
   } catch (e) {}
 }
 
+const DESK = () => !!(window.JardApp && window.JardApp.desktop) || (matchMedia('(min-width: 1000px)').matches && !matchMedia('(pointer: coarse)').matches);
+async function hasCamera() {
+  try { return (await navigator.mediaDevices.enumerateDevices()).some(d => d.kind === 'videoinput'); } catch (e) { return false; }
+}
+
 /** يفتح الكاميرا ويعيد أول باركود يُقرأ (أو null عند الإغلاق) */
 export async function scanCode() {
+  const desk = DESK();
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     try { return await live(); }
     catch (e) {
-      if (e && e.name === 'NotAllowedError') toast('اسمح للتطبيق باستخدام الكاميرا من إعدادات الجهاز', { bad: true });
+      if (e && e.name === 'NotAllowedError') toast(desk ? 'اسمح للبرنامج بالكاميرا من إعدادات ويندوز: الخصوصية ← الكاميرا' : 'اسمح للتطبيق باستخدام الكاميرا من إعدادات الجهاز', { bad: true });
       else if (e && e.message === 'closed') return null;
+      else if (desk) toast('تعذّر تشغيل الكاميرا. استعمل قارئ الباركود.', { bad: true });
     }
   }
-  return photo();
+  return desk ? null : photo();
+}
+
+/**
+ * زر المسح بجانب خانة البحث.
+ * الجوال: كاميرا. الكمبيوتر: أيقونة قارئ الباركود؛ القارئ يكتب في الخانة مباشرة دون ضغط الزر،
+ * والزر يفتح كاميرا اللابتوب إن وُجدت، وإلا يجهّز الخانة للمسح.
+ */
+export function scanButton(onCode, input) {
+  const desk = DESK();
+  return h('button', { class: 'iconbtn', type: 'button', 'aria-label': desk ? 'قارئ الباركود' : 'مسح بالكاميرا', title: desk ? 'قارئ الباركود: امسح مباشرة، أو اضغط لاستعمال كاميرا الكمبيوتر' : '',
+    on: { click: async () => {
+      if (desk && !(await hasCamera())) {
+        if (input) { input.focus(); input.select(); }
+        toast('القارئ جاهز: امسح الباركود الآن');
+        return;
+      }
+      const c = await scanCode(); if (c) onCode(c);
+    } } }, icon(desk ? 'barcode' : 'camera'));
 }
 
 function live() {

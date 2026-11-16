@@ -86,6 +86,7 @@ export function reportView(ctx, k) {
     return frame(ctx, k, meta[1], { chips: ['d', 'm', 'pm', 'y', 'all'], range, sheets: () => boxes.map(b => { const s = statement(L, { a: b.id, from, to }); return { name: b.n, rows: [['التاريخ', 'البيان', 'داخل', 'خارج', 'الرصيد'], ...s.rows.map(r => [r.d, r.m, r.dr || '', r.cr || '', r.bal])], widths: [12, 50, 14, 14, 16] }; }) }, out);
   }
   if (k === 'aging') {
+    if (!ctx.can('sup')) st.sup = false;
     const type = st.sup ? 's' : 'c', ag = aging(L, store.parties, today(), type);
     const cols = [{ t: 'الاسم' }, { t: 'الرصيد', n: 1 }, { t: 'حتى 30 يوماً', n: 1 }, { t: '31–90', n: 1 }, { t: '91–180', n: 1 }, { t: '181–365', n: 1 }, { t: 'أكثر من سنة', n: 1 }, { t: 'آخر سداد', d: 1 }];
     const rows = ag.filter(a => a.bal > 0.5).map(a => Object.assign([a.p.n, a.bal, ...a.b, a.lastPay], { _go: () => ctx.go('party/' + encodeURIComponent(a.p.id)), _cls: { 0: a.idle > 180 ? 'red' : '' } }));
@@ -93,7 +94,7 @@ export function reportView(ctx, k) {
     const foot = ['الإجمالي', sum(1), sum(2), sum(3), sum(4), sum(5), sum(6), ''];
     const dormant = ag.filter(a => a.bal > 0.5 && a.idle > 180);
     return frame(ctx, k, meta[1], { range: 'حتى ' + dmy(today()), sheets: () => sheet(meta[1], cols, rows, foot) }, h('div', null,
-      h('div', { class: 'chips' }, h('button', { class: 'chip' + (!st.sup ? ' set' : ''), on: { click: () => { st.sup = false; ctx.redraw(); } } }, 'ديون العملاء'), h('button', { class: 'chip' + (st.sup ? ' set' : ''), on: { click: () => { st.sup = true; ctx.redraw(); } } }, 'مستحقات الموردين')),
+      !ctx.can('sup') ? null : h('div', { class: 'chips' }, h('button', { class: 'chip' + (!st.sup ? ' set' : ''), on: { click: () => { st.sup = false; ctx.redraw(); } } }, 'ديون العملاء'), h('button', { class: 'chip' + (st.sup ? ' set' : ''), on: { click: () => { st.sup = true; ctx.redraw(); } } }, 'مستحقات الموردين')),
       dormant.length && !st.sup ? h('div', { class: 'note bad' }, dormant.length + ' عميلاً لم يسددوا شيئاً منذ أكثر من 6 أشهر، مجموعها ' + money(dormant.reduce((s, a) => s + a.bal, 0)) + '. راجعهم قبل اعتبارها ديوناً معدومة.') : null,
       page(rows.length ? tableEl(cols, rows, foot) : h('p', { class: 'empty' }, 'لا ديون قائمة.'))));
   }

@@ -44,14 +44,20 @@ function loginView(msg) {
     h('label', { class: 'field' }, h('span', { class: 'flabel' }, 'كلمة المرور'), pass),
     err, btn);
   app.className = ''; app.textContent = '';
-  app.appendChild(h('div', { class: 'login' }, h('div', { class: 'page' },
+  app.appendChild(brandScreen(h('div', { class: 'page' },
     h('div', { class: 'ph', style: { borderBottom: '0' } }, h('h1', null, 'حسابات الصيدلية'), h('div', { class: 'meta' }, 'الفواتير والحسابات والمخزون')),
     form, ver())));
   setTimeout(() => user.focus(), 50);
 }
 function waitView(msg) {
   app.className = ''; app.textContent = '';
-  app.appendChild(h('div', { class: 'login' }, h('div', { class: 'page' }, h('div', { class: 'ph', style: { borderBottom: '0' } }, h('h1', null, 'حسابات الصيدلية'), h('div', { class: 'meta' }, msg)))));
+  app.appendChild(brandScreen(h('div', { class: 'page' }, h('div', { class: 'ph', style: { borderBottom: '0' } }, h('h1', null, 'حسابات الصيدلية'), h('div', { class: 'meta' }, msg)))));
+}
+/** شاشة الدخول والتحميل: صورة النظام بجانب بطاقة الدخول (فوقها على الجوال) */
+function brandScreen(card) {
+  return h('div', { class: 'login brand' },
+    h('div', { class: 'loginpane' }, card),
+    h('div', { class: 'brandpane' }, h('img', { src: 'brand.jpg', alt: 'نظام إدارة الصيدليات، تطوير وبرمجة MOSMAD', decoding: 'async' })));
 }
 function ver() { const A = window.JardApp; return A && A.version ? h('p', { class: 'muted', style: { fontSize: '12.5px', marginTop: '14px' } }, 'نسخة التطبيق ' + A.version()) : null; }
 
@@ -186,7 +192,7 @@ function sideNav() {
       a('pay', 'سند صرف', 'out', 'v/pay', ctx.can('pay')),
       a('exp', 'مصروف', 'bolt', 'v/exp', ctx.can('exp'))),
     g('الدفاتر',
-      a('parties', 'العملاء والموردون', 'people', 'parties'),
+      a('parties', ctx.can('sup') ? 'العملاء والموردون' : 'العملاء', 'people', 'parties'),
       a('items', 'الأصناف والمخزون', 'pill', 'items'),
       a('vouchers', 'كل السندات', 'doc', 'vouchers'),
       a('reports', 'التقارير', 'report', 'reports')),

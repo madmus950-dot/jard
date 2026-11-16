@@ -283,6 +283,8 @@ public class MainActivity extends Activity {
         if (n.endsWith(".css")) return "text/css";
         if (n.endsWith(".json")) return "application/json";
         if (n.endsWith(".png")) return "image/png";
+        if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+        if (n.endsWith(".webp")) return "image/webp";
         if (n.endsWith(".svg")) return "image/svg+xml";
         if (n.endsWith(".ico")) return "image/x-icon";
         if (n.endsWith(".woff2")) return "font/woff2";

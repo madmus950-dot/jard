@@ -3,7 +3,7 @@ import { h, $, icon, toast, picker, numField, field, seg, confirmBox, put } from
 import { money, num, today, parseExp, norm } from './util.js';
 import { check, totals, partyBalance, CTRL, PARTY_TYPES, ADJ_REASONS, STORES } from './engine.js';
 import { cashAccounts, partyRows, partyFilter, partyName, balWords, printVoucher, searchItems, findBarcode, units, stockOf, qtyText } from './common.js';
-import { scanCode } from './scan.js';
+import { scanButton } from './scan.js';
 
 const TITLES = { rcpt: 'سند قبض', pay: 'سند صرف', exp: 'مصروف', cxf: 'تحويل بين الصناديق', jv: 'قيد يومية', adj: 'تسوية مخزون', xfer: 'تحويل بين المخازن' };
 
@@ -22,7 +22,7 @@ export function vchView(ctx, kind, arg) {
   async function pickWho() {
     if (kind === 'exp') return pickAcc();
     const types = kind === 'rcpt' ? ['c', 'e', 'o', 's'] : ['s', 'e', 'o', 'c'];
-    const rows = partyRows(store, types);
+    const rows = partyRows(store, types, ctx.can('sup') ? null : ['s', 'e', 'o']);
     const accRows = [...store.accounts.values()].filter(a => kind === 'rcpt' ? (a.k === 'eq' || (a.k === 'rev' && a.id >= '4400') || a.k === 'liab') : (a.k === 'exp' || a.k === 'eq' || a.k === 'asset' || a.k === 'liab'))
       .map(a => ({ value: { acc: a.id }, label: a.n, sub: 'حساب ' + a.id }));
     const all = rows.concat(accRows);
@@ -54,7 +54,7 @@ export function vchView(ctx, kind, arg) {
       put(body, 
         kind === 'exp' ? h('div', null, h('span', { class: 'flabel' }, 'نوع المصروف'), quickExp) :
           field(kind === 'rcpt' ? 'قبض من' : 'صرف إلى', h('button', { class: 'chip' + (who ? ' set' : ''), style: { width: '100%', minHeight: '48px', justifyContent: 'flex-start' }, on: { click: pickWho } }, icon('user', 18), h('b', null, who || 'اختر الاسم أو الحساب'))),
-        S.pt ? balInfo() : null,
+        S.pt && (ctx.can('sup') || (store.parties.get(S.pt) || {}).t === 'c') ? balInfo() : null,
         field('المبلغ', amount),
         boxes.length > 1 ? field('الصندوق', boxSel('ca')) : null);
     }
@@ -83,7 +83,7 @@ export function vchView(ctx, kind, arg) {
   function drawFoot() {
     foot.textContent = '';
     put(foot, h('div', null, h('div', { class: 'actions' }, h('button', { class: 'btn', on: { click: save } }, icon('check', 20), 'حفظ ' + title))));
-    const bi = $('.note.good', body); if (bi && S.pt) bi.replaceWith(balInfo());
+    const bi = $('.note.good', body); if (bi && S.pt && (ctx.can('sup') || (store.parties.get(S.pt) || {}).t === 'c')) bi.replaceWith(balInfo());
   }
   let saving = false;
   async function save() {
@@ -204,7 +204,7 @@ function stockView(ctx, kind) {
       ? field('السبب', seg(Object.entries(ADJ_REASONS).filter(([k]) => k !== 'found'), S.r, v => { S.r = v; }))
       : h('div', { class: 'row2' }, field('من', seg([[1, STORES[1]], [2, STORES[2]]], S.s, v => { S.s = v; S.s2 = v === 1 ? 2 : 1; toLbl.textContent = STORES[S.s2]; drawLines(); })), h('div', { class: 'field' }, h('span', { class: 'flabel' }, 'إلى'), toLbl)),
     kind === 'adj' ? field('المخزن', seg([[1, STORES[1]], [2, STORES[2]]], S.s, v => { S.s = v; S.ln.forEach(l => { l.s = v; }); drawLines(); })) : null,
-    h('div', { class: 'scan' }, input, h('button', { class: 'iconbtn', 'aria-label': 'مسح بالكاميرا', on: { click: async () => { const c = await scanCode(); if (c) { const f = findBarcode(store, c); if (f) add(f.it, f.u); else toast('الباركود غير مسجّل', { bad: true }); } } } }, icon('camera'))),
+    h('div', { class: 'scan' }, input, scanButton(c => { const f = findBarcode(store, c); if (f) add(f.it, f.u); else toast('الباركود غير مسجّل', { bad: true }); }, input)),
     sugg, lines,
     h('div', { class: 'row2' },
       field('التاريخ', h('input', { type: 'date', value: S.d, on: { change: e => { S.d = e.target.value || today(); } } })),

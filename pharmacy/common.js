@@ -96,13 +96,14 @@ export function qtyText(it, base) {
 /* ---------- الصناديق والحسابات والأطراف ---------- */
 export const cashAccounts = store => [...store.accounts.values()].filter(a => a.k === 'cash' && a.act !== false);
 export const partyName = (store, id) => (store.parties.get(id) || {}).n || '';
-export function partyRows(store, types) {
+/** hideBal: أنواع لا يُعرض رصيدها (الكاشير لا يرى أرصدة الموردين والموظفين) */
+export function partyRows(store, types, hideBal) {
   const L = store.L, rows = [];
   for (const p of store.parties.values()) {
     if (p.act === false || (types && !types.includes(p.t))) continue;
     const b = partyBalance(L, p.id);
-    const w = balWords(b, p.t);
-    rows.push({ value: p, label: p.n, sub: PARTY_TYPES[p.t] + (p.ph ? '، ' + p.ph : ''), side: w.amt ? money(w.amt) + ' ' + w.txt : '' });
+    const w = balWords(b, p.t), hid = hideBal && hideBal.includes(p.t);
+    rows.push({ value: p, label: p.n, sub: PARTY_TYPES[p.t] + (p.ph ? '، ' + p.ph : ''), side: w.amt && !hid ? money(w.amt) + ' ' + w.txt : '' });
   }
   return rows.sort((a, b) => a.label.localeCompare(b.label, 'ar'));
 }

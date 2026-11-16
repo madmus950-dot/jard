@@ -3,7 +3,7 @@ import { h, $, icon, toast, picker, numField, confirmBox, field, put, wide } fro
 import { money, price as fp, qty, num, today, parseExp, dmy } from './util.js';
 import { totals, check, STORES, partyBalance } from './engine.js';
 import { findBarcode, searchItems, units, stockOf, nearestExp, expTag, qtyText, cashAccounts, partyRows, partyFilter, partyName, avgCost, printVoucher, balWords } from './common.js';
-import { scanCode } from './scan.js';
+import { scanButton } from './scan.js';
 
 const META = {
   sale: { title: 'فاتورة بيع', pt: 'c', who: 'العميل', none: 'زبون نقدي', price: 'p', pay: 'cash', saved: 'حُفظت فاتورة البيع' },
@@ -48,7 +48,7 @@ export function docView(ctx, t) {
     if (boxes.length > 1) put(head, h('button', { class: 'chip', on: { click: async () => { const a = await picker('الصندوق', boxes.map(b => ({ value: b.id, label: b.n }))); if (a) { D.ca = a; change(); } } } }, icon('wallet', 18), (store.accounts.get(D.ca) || {}).n || 'الصندوق'));
   }
   async function pickParty() {
-    const rows = partyRows(store, [M.pt, ...(M.pt === 'c' ? ['e', 'o'] : ['o'])]);
+    const rows = partyRows(store, [M.pt, ...(M.pt === 'c' ? ['e', 'o'] : ['o'])], ctx.can('sup') ? null : ['s', 'e', 'o']);
     const r = await picker(M.who, [{ value: '', label: M.none }, ...rows], { filter: q => q ? partyFilter(rows)(q) : [{ value: '', label: M.none }, ...rows], add: ctx.can('party-add') ? 'إضافة ' + M.who + ' جديد' : '', placeholder: 'ابحث بالاسم أو الهاتف' });
     if (r === null) { if (!D.pt && D.pay === 'credit' && isSale) { D.pay = 'cash'; change(); } return; }
     if (r && r.add) {
@@ -120,10 +120,6 @@ export function docView(ctx, t) {
     if (found.length === 1 || (found.length && !/^\d+$/.test(q))) addItem(found[0], 0);
     else if (/^\d{5,}$/.test(q)) lookup(q);
   });
-  async function camera() {
-    const code = await scanCode();
-    if (code) lookup(code);
-  }
 
   /* ---------- سطور الفاتورة ---------- */
   function drawLines() {
@@ -258,7 +254,7 @@ export function docView(ctx, t) {
   let cashIn = '';
   function panelInfo(tt) {
     const box = h('div', { class: 'pinfo' });
-    if (D.pt && store.parties.get(D.pt)) {
+    if (D.pt && store.parties.get(D.pt) && (ctx.can('sup') || store.parties.get(D.pt).t === 'c')) {
       const p = store.parties.get(D.pt), b = partyBalance(store.L, D.pt), w = balWords(b, p.t);
       put(box, h('div', { class: 'pl' }, h('span', null, 'رصيد ' + (p.n || '')), h('b', { class: 'num ' + w.cls }, w.amt ? money(w.amt) + ' ' : '', h('small', null, w.txt))));
     }
@@ -309,7 +305,7 @@ export function docView(ctx, t) {
 
   drawHead(); drawLines(); drawFoot();
   const el = h('div', null, head,
-    h('div', { class: 'scan' }, input, h('button', { class: 'iconbtn', 'aria-label': 'مسح بالكاميرا', on: { click: camera } }, icon('camera'))),
+    h('div', { class: 'scan' }, input, scanButton(code => lookup(code), input)),
     sugg, lines, extra);
   return {
     title: M.title, sub: D.ln.length ? 'مسودة محفوظة' : '', el, foot,
