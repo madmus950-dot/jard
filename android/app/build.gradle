@@ -29,6 +29,13 @@ android {
             applicationId 'com.madmus950.pharmacy'
             resValue 'string', 'app_name', 'حسابات الصيدلية'
         }
+        // تصوير الطلبيات: قراءة النص من صور العلب على الجوال نفسه دون إنترنت (ML Kit)
+        order {
+            dimension 'app'
+            applicationId 'com.madmus950.order'
+            resValue 'string', 'app_name', 'تصوير الطلبيات'
+            ndk { abiFilters 'armeabi-v7a', 'arm64-v8a' }
+        }
     }
 
     signingConfigs {
@@ -59,4 +66,9 @@ android {
         checkReleaseBuilds false
         abortOnError false
     }
+}
+
+dependencies {
+    // قارئ النصوص اللاتينية مدمجاً في التطبيق: يعمل من أول تشغيل بلا إنترنت
+    orderImplementation 'com.google.mlkit:text-recognition:16.0.1'
 }

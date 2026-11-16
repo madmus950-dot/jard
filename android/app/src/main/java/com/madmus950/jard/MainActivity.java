@@ -82,6 +82,14 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setUserAgentString(s.getUserAgentString() + " JardApp/" + version());
         web.addJavascriptInterface(new Bridge(), "JardApp");
+        // قارئ النصوص موجود في تطبيق تصوير الطلبيات فقط
+        try {
+            Class<?> c = Class.forName("com.madmus950.jard.OcrBridge");
+            Object o = c.getConstructor(Activity.class, WebView.class).newInstance(this, web);
+            web.addJavascriptInterface(o, "JardOcr");
+        } catch (Throwable t) {
+            // ليس في هذا التطبيق
+        }
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -285,6 +293,7 @@ public class MainActivity extends Activity {
         if (n.endsWith(".png")) return "image/png";
         if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
         if (n.endsWith(".webp")) return "image/webp";
+        if (n.endsWith(".wasm")) return "application/wasm";
         if (n.endsWith(".svg")) return "image/svg+xml";
         if (n.endsWith(".ico")) return "image/x-icon";
         if (n.endsWith(".woff2")) return "font/woff2";

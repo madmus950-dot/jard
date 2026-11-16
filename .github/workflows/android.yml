@@ -9,6 +9,7 @@ on:
       - fbsdk.js
       - config.js
       - pharmacy/**
+      - order/**
       - android/**
       - desktop/**
       - .github/workflows/android.yml
@@ -45,6 +46,8 @@ jobs:
           cat web.log
           if ! bash android/build-pharmacy.sh > ph.log 2>&1; then report ph.log pharmacy-assets; exit 1; fi
           cat ph.log
+          if ! bash android/build-order.sh > or.log 2>&1; then report or.log order-assets; exit 1; fi
+          cat or.log
           (cd android/app/src/jard/assets && zip -qr "$GITHUB_WORKSPACE/web-assets.zip" www)
           (cd android/app/src/pharmacy/assets && zip -qr "$GITHUB_WORKSPACE/pharmacy-assets.zip" www)
 
@@ -84,10 +87,12 @@ jobs:
           V="1.0.${{ github.run_number }}"
           cp android/app/build/outputs/apk/jard/release/app-jard-release.apk "jard-$V.apk"
           cp android/app/build/outputs/apk/pharmacy/release/app-pharmacy-release.apk "pharmacy-$V.apk"
+          cp android/app/build/outputs/apk/order/release/app-order-release.apk "order-$V.apk"
           cp "jard-$V.apk" jard.apk
           cp "pharmacy-$V.apk" pharmacy.apk
-          NOTES="نسخة $V: jard.apk تطبيق الجرد، pharmacy.apk تطبيق حسابات الصيدلية. ثبّت كل ملف فوق نسخته السابقة مباشرة."
-          FILES="jard-$V.apk pharmacy-$V.apk jard.apk pharmacy.apk web-assets.zip pharmacy-assets.zip"
+          cp "order-$V.apk" order.apk
+          NOTES="نسخة $V: jard.apk تطبيق الجرد، pharmacy.apk تطبيق حسابات الصيدلية، order.apk تطبيق تصوير الطلبيات. ثبّت كل ملف فوق نسخته السابقة مباشرة."
+          FILES="jard-$V.apk pharmacy-$V.apk order-$V.apk jard.apk pharmacy.apk order.apk web-assets.zip pharmacy-assets.zip"
           if gh release view "v$V" >/dev/null 2>&1; then
             gh release upload "v$V" $FILES --clobber
           else
