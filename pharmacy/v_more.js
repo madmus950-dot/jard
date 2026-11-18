@@ -382,7 +382,7 @@ export function importView(ctx) {
           status.textContent = 'جارٍ رفع الأصناف…';
           const items = pkg.items.map(x => ({ id: x.id, data: Object.assign({}, store.items.get(x.id) || {}, x, { act: true, at: Date.now() }) }));
           await be.putMany('items', items, (a, b) => { status.textContent = 'الأصناف ' + a + ' من ' + b; });
-          const parties = pkg.parties.map(p => ({ id: p.id, data: Object.assign({}, store.parties.get(p.id) || {}, { id: p.id, n: p.n, t: p.t, ph: p.ph || '', act: true, at: Date.now() }) }));
+          const parties = pkg.parties.map(p => ({ id: p.id, data: Object.assign({}, store.parties.get(p.id) || {}, { id: p.id, n: p.n, t: p.t, ph: p.ph || '', act: true, at: Date.now() }, p.nbr ? { nbr: 1 } : {}) }));
           await be.putMany('parties', parties, (a, b) => { status.textContent = 'الأسماء ' + a + ' من ' + b; });
           status.textContent = 'تم: ' + items.length + ' صنف و' + parties.length + ' اسم.';
         } catch (x) { status.textContent = x.code === 'permission-denied' ? 'Firebase رفض الكتابة: انشر قواعد Firestore الجديدة أولاً ثم أعد المحاولة.' : 'تعذّر: ' + (x.code || x.message); }

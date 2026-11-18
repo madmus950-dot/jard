@@ -93,7 +93,7 @@ export function partyView(ctx, id) {
   const act = (label, ic, fn) => h('button', { class: 'btn ghost sm', on: { click: fn } }, h('span', null, label));
   const actions = h('div', { class: 'actions', style: { marginTop: '0', marginBottom: '12px' } },
     p.t === 'c' && ctx.can('rcpt') ? h('a', { class: 'btn sm', href: '#/v/rcpt/' + encodeURIComponent(id) }, 'قبض منه') : null,
-    p.t === 's' && ctx.can('pay') ? h('a', { class: 'btn sm', href: '#/v/pay/' + encodeURIComponent(id) }, 'صرف له') : null,
+    (p.t === 's' || p.nbr) && ctx.can('pay') ? h('a', { class: 'btn sm', href: '#/v/pay/' + encodeURIComponent(id) }, p.nbr ? 'صرف له (تخليص)' : 'صرف له') : null,
     p.t === 'e' && ctx.can('pay') ? h('a', { class: 'btn sm', href: '#/v/pay/' + encodeURIComponent(id) }, 'صرف له') : null,
     act('مشاركة', 'share', async () => { const r = await shareText(textSummary()); if (r === 'copied') toast('نُسخ الكشف. الصقه في واتساب.'); }),
     act('تصدير وطباعة', 'print', exportSt),
@@ -106,7 +106,7 @@ export function partyView(ctx, id) {
         h('div', { class: 'ph', style: { borderBottom: 0 } },
           h('h2', null, p.n),
           h('div', { class: 'bal-big num ' + w.cls }, money(w.amt), ' ', h('span', { style: { fontSize: '17px', fontWeight: 500 } }, w.txt)),
-          h('div', { class: 'bal-note' }, w.amt ? (p.t === 's' ? (b < 0 ? 'مبلغ علينا للمورد' : 'دفعنا للمورد أكثر من فواتيره') : (b > 0 ? 'مبلغ لنا عنده' : 'دفع أكثر مما عليه')) : 'لا رصيد قائم'),
+          h('div', { class: 'bal-note' }, w.amt ? (p.t === 's' ? (b < 0 ? 'مبلغ علينا للمورد' : 'دفعنا للمورد أكثر من فواتيره') : (b > 0 ? 'مبلغ لنا عنده' : p.nbr ? 'علينا له حتى التخليص' : 'دفع أكثر مما عليه')) : 'لا رصيد قائم'),
           p.lim && b > +p.lim ? h('div', { class: 'note bad' }, 'تجاوز حد الدين ' + money(p.lim)) : null)),
       actions,
       periodChips(stState.per, k => { stState.per = k; ctx.redraw(); }, ['m', 'pm', 'y', 'all']),

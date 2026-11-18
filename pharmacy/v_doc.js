@@ -1,5 +1,5 @@
 /* فاتورة البيع والشراء والمرتجعات: مسح أو بحث ← سطر ← حفظ. المسودة تبقى محفوظة لو أُغلق التطبيق. */
-import { h, $, icon, toast, picker, numField, confirmBox, field, put, wide, seg } from './ui.js';
+import { h, $, icon, toast, picker, numField, confirmBox, field, put, wide, seg, sheet } from './ui.js';
 import { money, price as fp, qty, num, today, parseExp, dmy, norm } from './util.js';
 import { totals, check, STORES, partyBalance } from './engine.js';
 import { findBarcode, findCode, parseCode, linkBarcode, searchItems, units, stockOf, nearestExp, expTag, qtyText, cashAccounts, partyRows, partyFilter, partyName, avgCost, printVoucher, balWords } from './common.js';
@@ -72,7 +72,7 @@ export function docView(ctx, t) {
   function addItem(it, uIdx, exp) {
     const us = units(it); uIdx = uIdx || 0;
     const u = us[uIdx] || us[0];
-    const same = D.ln.find(l => l.i === it.id && l.u === uIdx && (!isBuy || !l.x || (exp && l.x === exp)));
+    const same = D.ln.find(l => l.i === it.id && l.u === uIdx && !l.b && (!isBuy || !l.x || (exp && l.x === exp)));
     if (same && isSale) { same.q = +(same.q || 0) + 1; D.ln.splice(D.ln.indexOf(same), 1); D.ln.unshift(same); }
     else {
       const l = { i: it.id, n: it.n, u: uIdx, z: u.s, q: 1, s: D.s };
@@ -84,6 +84,96 @@ export function docView(ctx, t) {
     change();
     setTimeout(() => { const first = $('input.q', lines); if (isBuy && first) first.select(); }, 30);
   }
+  /* ---------- صنف من صيدلية أخرى (يُؤخذ لزبون ويُخلَّص لاحقاً) ----------
+     يُضاف سطراً عادياً معلَّماً بالصيدلية. عند حفظ الفاتورة يُحفظ قبلها سند شراء من تلك الصيدلية
+     (آجل حتى التخليص، أو نقداً إن دُفع الآن)، فيدخل الصنف المخزون ثم يخرج بالبيع ويبقى المستحق في حسابها. */
+  async function borrow(q0) {
+    const last = (() => { try { return localStorage.getItem('pharm.lender') || ''; } catch (e) { return ''; } })();
+    const S = { pt: last && store.parties.has(last) ? last : '', it: null, name: q0 || '', un: 'علبة', u: 0, q: 1, c: '', p: '', cash: false };
+    const body = h('div');
+    let s = null;
+    // الصيدليات المجاورة أزراراً ظاهرة، وغيرها بالبحث (لا نافذة فوق النافذة)
+    const lq = h('input', { type: 'search', placeholder: 'صيدلية أخرى: ابحث أو اكتب اسماً جديداً', autocomplete: 'off', on: { input: () => drawLenders() } });
+    const lbox = h('div');
+    function drawLenders() {
+      lbox.textContent = '';
+      const near = [...store.parties.values()].filter(p => p.nbr && p.act !== false).sort((a, b) => a.n.localeCompare(b.n, 'ar'));
+      if (S.pt && !near.some(p => p.id === S.pt) && store.parties.has(S.pt)) near.unshift(store.parties.get(S.pt));
+      put(lbox, h('div', { class: 'chips', style: { flexWrap: 'wrap', overflow: 'visible' } }, near.map(p => h('button', { type: 'button', class: 'chip' + (S.pt === p.id ? ' set' : ''), style: { flex: '0 0 auto', whiteSpace: 'nowrap' }, on: { click: () => { S.pt = p.id; lq.value = ''; drawLenders(); } } }, p.n))));
+      const n = norm(lq.value);
+      if (!n) return;
+      const list = h('div', { class: 'sugg' });
+      for (const p of [...store.parties.values()].filter(p => p.act !== false && ['c', 's', 'o'].includes(p.t) && norm(p.n).includes(n)).slice(0, 6))
+        put(list, h('button', { type: 'button', on: { click: () => { S.pt = p.id; lq.value = ''; drawLenders(); } } }, h('span', null, h('b', { style: { fontWeight: 500 } }, p.n))));
+      if (ctx.can('party-add')) put(list, h('button', { type: 'button', on: { click: async () => { S.pt = await store.put('parties', null, { n: lq.value.trim(), t: 'c', ph: '', act: true, nbr: 1, at: Date.now() }); lq.value = ''; drawLenders(); } } },
+        h('span', null, h('b', { style: { fontWeight: 500 } }, 'إضافة صيدلية جديدة: ' + lq.value.trim()))));
+      put(lbox, list);
+    }
+    const nameIn = h('input', { type: 'search', value: S.name, placeholder: 'اسم الصنف', autocomplete: 'off', on: { input: e => { S.name = e.target.value; S.it = null; drawFound(); drawItem(); } } });
+    const found = h('div', { class: 'sugg' });
+    const itemBox = h('div');
+    function drawFound() {
+      found.textContent = '';
+      const q = S.name.trim();
+      if (!q || S.it) { found.classList.add('hide'); return; }
+      found.classList.remove('hide');
+      for (const it of searchItems(store, q, 6)) put(found, h('button', { type: 'button', on: { click: () => { S.it = it; S.name = it.n; nameIn.value = it.n; S.u = 0; S.p = (units(it)[0] || {}).p || ''; drawFound(); drawItem(); } } },
+        h('span', null, h('b', { style: { fontWeight: 500 } }, it.n), h('small', null, 'المتوفر ' + qtyText(it, stockOf(store.L, it.id, D.s)))), h('span', { class: 'num' }, fp((units(it)[0] || {}).p || 0))));
+      put(found, h('button', { type: 'button', on: { click: () => { found.classList.add('hide'); drawItem(); } } }, h('span', null, h('b', { style: { fontWeight: 500 } }, 'صنف جديد: ' + q), h('small', null, 'غير موجود في النظام، يُضاف باسمه'))));
+    }
+    function drawItem() {
+      itemBox.textContent = '';
+      const nw = !S.it && S.name.trim();
+      if (!S.it && !nw) return;
+      const us = S.it ? units(S.it) : null;
+      put(itemBox,
+        S.it ? h('div', { class: 'note good' }, 'صنف موجود: ' + S.it.n) : h('div', { class: 'note' }, 'صنف جديد يُضاف للنظام باسم «' + S.name.trim() + '». أكمل بياناته لاحقاً من بطاقة الصنف.'),
+        h('div', { class: 'row2' },
+          field('الكمية', numField({ value: S.q, on: { input: e => { S.q = num(e.target.value); } } })),
+          us && us.length > 1 ? field('الوحدة', h('select', { on: { change: e => { S.u = +e.target.value; S.p = (us[S.u] || {}).p || ''; drawItem(); } } }, us.map((u, j) => h('option', { value: j, selected: j === S.u }, u.n))))
+            : !us ? field('الوحدة', h('input', { value: S.un, on: { input: e => { S.un = e.target.value; } } })) : h('span')),
+        h('div', { class: 'row2' },
+          field('سعرها علينا (للوحدة)', numField({ value: S.c, placeholder: '0', on: { input: e => { S.c = e.target.value; } } })),
+          field('سعر البيع للزبون', numField({ value: S.p, placeholder: '0', on: { input: e => { S.p = e.target.value; } } }))));
+    }
+    function draw() {
+      body.textContent = '';
+      put(body,
+        h('p', { class: 'muted', style: { fontSize: '14px', margin: '0 0 10px' } }, 'للصنف غير الموجود عندك: تأخذه من صيدلية أخرى للزبون، ويُسجّل عليك لها حتى التخليص.'),
+        h('div', { class: 'field' }, h('span', { class: 'flabel' }, 'من صيدلية'), lbox, lq),
+        field('الصنف', nameIn), found, itemBox,
+        field('التخليص', seg([[0, 'آجل حتى التخليص'], [1, 'دفعناه نقداً الآن']], S.cash ? 1 : 0, v => { S.cash = !!v; })),
+        h('div', { class: 'actions' },
+          h('button', { class: 'btn', on: { click: add } }, icon('plus', 18), 'أضف إلى الفاتورة'),
+          h('button', { class: 'btn ghost', on: { click: () => s && s.close() } }, 'رجوع')));
+      drawLenders(); drawFound(); drawItem();
+    }
+    async function add() {
+      const q = num(S.q), c = num(S.c), p = num(S.p), nm = S.name.trim();
+      if (!S.pt) { toast('اختر الصيدلية', { bad: true }); return; }
+      if (!S.it && !nm) { toast('اكتب اسم الصنف', { bad: true }); return; }
+      if (!(q > 0)) { toast('اكتب الكمية', { bad: true }); return; }
+      if (!(c > 0)) { toast('اكتب سعره عليك من الصيدلية', { bad: true }); return; }
+      if (!(p > 0)) { toast('اكتب سعر البيع', { bad: true }); return; }
+      let it = S.it, uIdx = S.u;
+      if (!it) {
+        const id = await store.put('items', null, { n: nm, co: '', bc: [], u: [{ n: (S.un || 'علبة').trim() || 'علبة', s: 1, p }], c0: c, min: 0, act: true, nb: 1, at: Date.now() });
+        it = store.items.get(id); uIdx = 0;
+      }
+      const u = units(it)[uIdx] || units(it)[0];
+      D.ln.unshift({ i: it.id, n: it.n, u: uIdx, z: u.s, q, s: D.s, p, b: { pt: S.pt, c, cash: S.cash ? 1 : 0 } });
+      const pa = store.parties.get(S.pt);
+      if (pa && !pa.nbr) store.put('parties', S.pt, { nbr: 1 }, true);
+      try { localStorage.setItem('pharm.lender', S.pt); } catch (e) {}
+      input.value = ''; sugg.classList.add('hide');
+      s.close(); change();
+    }
+    draw();
+    s = sheet('صنف من صيدلية أخرى', body, { tall: true });
+    setTimeout(() => nameIn.focus(), 250);
+  }
+  const lenderTag = l => h('span', { class: 'tag' }, 'من ' + partyName(store, l.b.pt) + '، عليك ' + money((+l.b.c || 0) * (+l.q || 0)) + (l.b.cash ? ' مدفوعة' : ' حتى التخليص'));
+
   /** يعيد اسم الصنف المضاف، أو false */
   async function lookup(raw) {
     const f = findCode(store, raw);
@@ -116,6 +206,7 @@ export function docView(ctx, t) {
         h('span', null, h('b', { style: { fontWeight: 500 } }, it.n), h('small', null, [it.co, qtyText(it, st) + ' في ' + STORES[D.s], t === 'sale' && st <= 1e-9 && oq > 1e-9 ? 'يوجد ' + qtyText(it, oq) + ' في ' + STORES[os] : ''].filter(Boolean).join('، '))),
         h('span', { class: 'num', style: { fontWeight: 600 } }, fp(isSale ? u0.p : avgCost(L, store, it.id) * u0.s))));
     }
+    if (t === 'sale' && !/^\d{5,}$/.test(q)) put(sugg, h('button', { type: 'button', on: { click: () => borrow(found.length ? '' : q) } }, h('span', null, h('b', { style: { fontWeight: 500 } }, 'غير موجود عندك؟ خذه من صيدلية أخرى'), h('small', null, 'يُسجّل عليك للصيدلية حتى التخليص'))));
     sugg.classList.remove('hide');
   }
   input.addEventListener('input', () => { hl = -1; showSugg(); });
@@ -150,7 +241,7 @@ export function docView(ctx, t) {
       const us = units(it), price = +l[P] || 0;
       const amt = (+l.q || 0) * price;
       const have = stockOf(L, l.i, l.s);
-      const unitSel = h('select', { 'aria-label': 'الوحدة', on: { change: e => { const nu = +e.target.value, u = us[nu]; l.u = nu; l.z = u.s; if (P === 'p') l.p = +u.p || 0; else l.c = Math.round(avgCost(L, store, l.i) * u.s * 100) / 100; change(); } } },
+      const unitSel = h('select', { 'aria-label': 'الوحدة', disabled: !!l.b, on: { change: e => { const nu = +e.target.value, u = us[nu]; l.u = nu; l.z = u.s; if (P === 'p') l.p = +u.p || 0; else l.c = Math.round(avgCost(L, store, l.i) * u.s * 100) / 100; change(); } } },
         us.map((u, j) => h('option', { value: j, selected: j === l.u }, u.n)));
       const qIn = h('input', { class: 'q num', inputmode: 'decimal', value: l.q, 'aria-label': 'الكمية', on: { change: e => { l.q = Math.max(0, num(e.target.value)); change(); }, focus: e => e.target.select() } });
       const step = h('span', { class: 'step' },
@@ -169,7 +260,8 @@ export function docView(ctx, t) {
         }
       }
       const info = h('div', { class: 'info' });
-      if (isSale && t === 'sale') {
+      if (t === 'sale' && l.b) put(info, lenderTag(l));
+      else if (isSale && t === 'sale') {
         const need = (+l.q || 0) * l.z;
         put(info, h('span', { class: need > have + 1e-9 ? 'red' : '' }, 'المتوفر ' + qtyText(it, have)));
         put(info, elsewhere(it, l, need));
@@ -203,10 +295,11 @@ export function docView(ctx, t) {
       const step = isBuy ? (qIn.classList.add('cell'), qIn) : h('span', { class: 'step' },
         h('button', { type: 'button', tabindex: -1, 'aria-label': 'زيادة', on: { click: () => { l.q = (+l.q || 0) + 1; change(); } } }, icon('plus', 16)), qIn,
         h('button', { type: 'button', tabindex: -1, 'aria-label': 'إنقاص', on: { click: () => { l.q = Math.max(0, (+l.q || 0) - 1); if (!l.q) D.ln.splice(k, 1); change(); } } }, icon('minus', 16)));
-      const unitSel = h('select', { class: 'cell', 'aria-label': 'الوحدة', on: { change: e => { const nu = +e.target.value, u = us[nu]; l.u = nu; l.z = u.s; if (P === 'p') l.p = +u.p || 0; else l.c = Math.round(avgCost(L, store, l.i) * u.s * 100) / 100; change(); } } },
+      const unitSel = h('select', { class: 'cell', 'aria-label': 'الوحدة', disabled: !!l.b, on: { change: e => { const nu = +e.target.value, u = us[nu]; l.u = nu; l.z = u.s; if (P === 'p') l.p = +u.p || 0; else l.c = Math.round(avgCost(L, store, l.i) * u.s * 100) / 100; change(); } } },
         us.map((u, j) => h('option', { value: j, selected: j === l.u }, u.n)));
       const info = h('small', { class: 'gi' });
-      if (t === 'sale') {
+      if (t === 'sale' && l.b) put(info, lenderTag(l));
+      else if (t === 'sale') {
         const need = (+l.q || 0) * l.z;
         put(info, h('span', { class: need > have + 1e-9 ? 'red' : '' }, 'المتوفر ' + qtyText(it, have)));
         put(info, elsewhere(it, l, need));
@@ -244,6 +337,7 @@ export function docView(ctx, t) {
     const o = { i: l.i, n: l.n, u: l.u, z: l.z, q: +l.q || 0, s: l.s || 1 };
     if (P === 'p') o.p = +l.p || 0; else { o.c = +l.c || 0; if (+l.f) o.f = +l.f; }
     if (l.x) o.x = l.x;
+    if (l.b && t === 'sale') o.bw = l.b.pt;
     return o;
   }
   function drawFoot() {
@@ -294,20 +388,31 @@ export function docView(ctx, t) {
     if (err) { toast(err, { bad: true }); if (/العميل|المورد/.test(err)) pickParty(); return; }
     if (t === 'sale') {
       const L = store.L, need = new Map();
-      for (const l of v.ln) need.set(l.i + '|' + l.s, (need.get(l.i + '|' + l.s) || 0) + l.q * l.z);
+      for (const l of v.ln) if (!l.bw) need.set(l.i + '|' + l.s, (need.get(l.i + '|' + l.s) || 0) + l.q * l.z);
       const short = [...need].filter(([k, q]) => { const [i, s] = k.split('|'); return q > stockOf(L, i, +s) + 1e-9; });
       const other = short.filter(([k]) => { const [i, s2] = k.split('|'); return stockOf(L, i, +s2 === 2 ? 1 : 2) > 1e-9; }).map(([k]) => { const i = k.split('|')[0], it = store.items.get(i); return it ? it.n : i; });
       if (short.length && !(await confirmBox('الكمية أكبر من المتوفر', short.length + ' صنف كميته في الفاتورة أكبر مما في ' + STORES[D.s] + ' حسب الدفتر.' + (other.length ? ' منها موجود في ' + STORES[D.s === 1 ? 2 : 1] + ': ' + other.slice(0, 5).join('، ') + (other.length > 5 ? '…' : '') + '.' : '') + ' احفظ إن كان الصنف موجوداً فعلاً، ثم صحّح المخزون بالجرد.', 'حفظ على أي حال'))) return;
     }
+    // أصناف من صيدليات أخرى: سند شراء لكل صيدلية (آجل أو نقداً) يُحفظ قبل الفاتورة
+    const bg = new Map();
+    if (t === 'sale') for (const l of D.ln) if (l.b && (+l.q || 0) > 0) { const k = l.b.pt + '|' + (l.b.cash ? 1 : 0); if (!bg.has(k)) bg.set(k, []); bg.get(k).push(l); }
+    const purs = [...bg].map(([k, ls], j) => {
+      const [pt, cash] = k.split('|');
+      const pv = { t: 'pur', d: v.d, ca: v.ca, pt, ln: ls.map(l => ({ i: l.i, n: l.n, u: l.u, z: l.z, q: +l.q, c: +l.b.c, s: anyStore ? (l.s || 1) : 1 })), ds: 0, m: 'أصناف أُخذت لزبون من ' + partyName(store, pt), bw: 1, at: Date.now() - 2000 + j };
+      pv.pd = cash === '1' ? totals(pv).tot : 0;
+      return pv;
+    });
+    for (const pv of purs) { const e = check(pv, { items: store.items, parties: store.parties, accounts: store.accounts, lock: store.settings.lock }); if (e) { toast('سند الصيدلية الأخرى: ' + e, { bad: true }); return; } }
     saving = true;
     try {
+      for (const pv of purs) await store.saveVoucher(pv);
       const doc = await store.saveVoucher(v);
       if (t === 'pur') for (const l of D.ln) if (l.np != null && store.items.get(l.i)) {
         const it = store.items.get(l.i), us = units(it).map(u => Object.assign({}, u));
         if (us[l.u]) { const ratio = (+l.np || 0) / (+us[l.u].p || 1); us[l.u].p = +l.np; us.forEach((u, j) => { if (j !== l.u && us[l.u].p && u.p) u.p = Math.round(u.p * ratio); }); await store.put('items', it.id, Object.assign({}, it, { u: us })); }
       }
       drafts[t] = D = fresh(t); persist(D); cashIn = '';
-      toast(M.saved + ' ' + doc.no, { action: { label: 'طباعة', fn: () => printVoucher(store, doc) } });
+      toast(M.saved + ' ' + doc.no + (purs.length ? '، ومعها ' + (purs.length === 1 ? 'سند شراء من الصيدلية الأخرى' : purs.length + ' سندات شراء من صيدليات أخرى') : ''), { action: { label: 'طباعة', fn: () => printVoucher(store, doc) } });
       change();
       input.focus();
     } catch (e) { toast('تعذّر الحفظ: ' + (e.message || e), { bad: true }); }
@@ -431,6 +536,7 @@ export function docView(ctx, t) {
     h('div', { class: 'scan' }, input, scanButton(code => lookup(code), input, { inline: toggleCam })),
     camHost,
     isBuy ? h('div', { style: { margin: '0 0 10px' } }, h('button', { type: 'button', class: 'btn ghost sm', on: { click: () => fileIn.click() } }, icon('doc', 18), 'استيراد من ملف'), fileIn) : null,
+    t === 'sale' ? h('div', { style: { margin: '0 0 10px' } }, h('button', { type: 'button', class: 'btn ghost sm', on: { click: () => borrow(input.value.trim()) } }, icon('swap', 18), 'صنف من صيدلية أخرى')) : null,
     sugg, lines, extra);
   return {
     title: M.title, sub: D.ln.length ? 'مسودة محفوظة' : '', el, foot,

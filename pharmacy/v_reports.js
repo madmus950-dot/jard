@@ -1,7 +1,7 @@
 /* التقارير: كلها محسوبة من الدفتر نفسه لحظة فتحها، وتُطبع أو تُحفظ Excel */
 import { h, icon, toast, put } from './ui.js';
 import { money, qty, dmy, today, addDays, monthsLeft, expKey, r2, daysBetween, rangeText } from './util.js';
-import { trialBalance, profitLoss, balanceSheet, aging, expiries, itemSales, statement, accBalance, STORES } from './engine.js';
+import { trialBalance, profitLoss, balanceSheet, aging, expiries, itemSales, statement, accBalance, STORES, totals, partyBalance } from './engine.js';
 import { periodChips, periodRange, cashAccounts, units, qtyText, partyName, balWords } from './common.js';
 import { openExport } from './export.js';
 
@@ -72,7 +72,17 @@ export function reportView(ctx, k) {
       .map(([d, x]) => { const r = [d, x.n, x.sales, x.ret, x.cash, x.credit]; if (ctx.can('profit')) r.push(r2(x.sales - x.ret - x.cost)); return r; });
     const sum = i => r2(rows.reduce((s, r) => s + (+r[i] || 0), 0));
     const foot = ['الإجمالي', sum(1), sum(2), sum(3), sum(4), sum(5)]; if (ctx.can('profit')) foot.push(sum(6));
-    return frame(ctx, k, meta[1], { chips: ['d', 'm', 'pm', 'y', 'all'], range, sheets: () => sheet(meta[1], cols, rows, foot) }, page(rows.length ? tableEl(cols, rows, foot) : h('p', { class: 'empty' }, 'لا مبيعات في هذه الفترة.')));
+    // أصناف أُخذت لزبائن من صيدليات أخرى في الفترة، ورصيد كل صيدلية الآن (للتخليص آخر اليوم)
+    const bw = [...store.vouchers.values()].filter(v => v.st !== 'void' && v.t === 'pur' && v.bw && (!from || v.d >= from) && (!to || v.d <= to));
+    const g = new Map();
+    for (const v of bw) { const x = g.get(v.pt) || { n: 0, tot: 0, paid: 0 }; x.n += (v.ln || []).length; x.tot += totals(v).tot; x.paid += +v.pd || 0; g.set(v.pt, x); }
+    const bcols = [{ t: 'الصيدلية' }, { t: 'الأصناف', n: 'q' }, { t: 'قيمتها', n: 1 }, { t: 'دُفع نقداً', n: 1 }, { t: 'علينا لها الآن', n: 1 }];
+    const brows = [...g].map(([pt, x]) => Object.assign([partyName(store, pt), x.n, r2(x.tot), r2(x.paid), r2(-partyBalance(L, pt))], { _go: () => ctx.go('party/' + encodeURIComponent(pt)) }));
+    const bfoot = ['الإجمالي', brows.reduce((s, r) => s + r[1], 0), r2(brows.reduce((s, r) => s + r[2], 0)), r2(brows.reduce((s, r) => s + r[3], 0)), r2(brows.reduce((s, r) => s + r[4], 0))];
+    return frame(ctx, k, meta[1], { chips: ['d', 'm', 'pm', 'y', 'all'], range, sheets: () => sheet(meta[1], cols, rows, foot).concat(brows.length ? sheet('من صيدليات أخرى', bcols, brows, bfoot) : []) }, h('div', null,
+      page(rows.length ? tableEl(cols, rows, foot) : h('p', { class: 'empty' }, 'لا مبيعات في هذه الفترة.')),
+      brows.length ? h('h3', { class: 'sect' }, 'أصناف من صيدليات أخرى (للتخليص)') : null,
+      brows.length ? page(tableEl(bcols, brows, bfoot)) : null));
   }
   if (k === 'cash') {
     const boxes = cashAccounts(store), out = h('div');
