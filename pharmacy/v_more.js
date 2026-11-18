@@ -5,6 +5,7 @@ import { totals, check, TYPES, STORES, PARTY_TYPES, describe } from './engine.js
 import { typeName, voucherLine, partyName, units, printVoucher, cashAccounts, exportVoucher } from './common.js';
 import { shareText, printHtml, saveBlob } from './out.js';
 import { COLS } from './store.js';
+import { activeCloses } from './v_close.js';
 
 export function moreView(ctx) {
   const it = (k, label, sub, ic, href) => ctx.can(k) ? h('a', { class: 'ln link', href: '#/' + href }, h('span', { class: 'k', style: { display: 'flex', gap: '12px', alignItems: 'center' } }, icon(ic, 22), h('span', null, h('b', null, label), sub ? h('small', null, sub) : null)), icon('fwd', 18)) : null;
@@ -44,9 +45,9 @@ export function moreView(ctx) {
 }
 
 /* ---------- نسخة احتياطية كاملة (للمشرف) ---------- */
-async function backupAll(ctx) {
+async function backupAll(ctx, quiet) {
   const st = ctx.store;
-  if (st.status.pending && !(await confirmBox('سندات لم تُرفع', st.status.pending + ' سند على هذا الجهاز لم يصل الخادم بعد، وهي داخلة في النسخة. أكمل؟', 'أكمل'))) return;
+  if (!quiet && st.status.pending && !(await confirmBox('سندات لم تُرفع', st.status.pending + ' سند على هذا الجهاز لم يصل الخادم بعد، وهي داخلة في النسخة. أكمل؟', 'أكمل'))) return 'cancel';
   const data = {};
   for (const c of COLS) data[c] = Object.fromEntries([...(st.data[c] || new Map()).entries()].map(([k, v]) => [k, v && v.data !== undefined && v.u !== undefined ? v.data : v]));
   const now = new Date(), stamp = now.toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/^(\d{8})(\d{4})$/, '$1_$2');
@@ -54,8 +55,79 @@ async function backupAll(ctx) {
   const pkg = { kind: 'pharm-backup', v: 1, at: now.toISOString(), project: cfg.projectId || '', by: ctx.user.email, counts: Object.fromEntries(COLS.map(c => [c, Object.keys(data[c]).length])), data };
   try {
     const r = await saveBlob('نسخة_الحسابات_' + stamp + '.json', new Blob([JSON.stringify(pkg)], { type: 'application/json' }));
-    if (r !== 'cancel') toast('حُفظت النسخة: ' + pkg.counts.v + ' سند، ' + pkg.counts.items + ' صنف، ' + pkg.counts.parties + ' اسم');
-  } catch (e) { toast('تعذّر حفظ النسخة: ' + e.message, { bad: true }); }
+    if (r === 'cancel') return 'cancel';
+    toast('حُفظت النسخة: ' + pkg.counts.v + ' سند، ' + pkg.counts.items + ' صنف، ' + pkg.counts.parties + ' اسم');
+    return 'ok';
+  } catch (e) { toast('تعذّر حفظ النسخة: ' + e.message, { bad: true }); return 'error'; }
+}
+
+/* ---------- تصفير بيانات التجربة قبل التشغيل الفعلي ----------
+   لا يُحذف شيء: كل سند فعّال يُلغى بسبب مسجّل (ويُخفى من «كل السندات»)، وتُفتح الفترات المقفلة،
+   وتُوقف الأسماء والأصناف التي أُضيفت يدوياً للتجربة. تُحفظ نسخة احتياطية كاملة أولاً، وبدونها لا يبدأ. */
+const RESET_WHY = 'تصفير بيانات التجربة قبل التشغيل الفعلي';
+const isResetVoid = v => v.st === 'void' && v.vd && v.vd.reset;
+function testState(store) {
+  return {
+    vs: [...store.vouchers.values()].filter(v => v.st !== 'void'),
+    closes: activeCloses(store),
+    lock: store.settings.lock || '',
+    parties: [...store.parties.values()].filter(p => p.act !== false && !/^p\d{8}$/.test(p.id)),
+    items: [...store.items.values()].filter(i => i.act !== false && /^i[0-9a-z]{8,}$/.test(i.id))
+  };
+}
+function resetBox(ctx, after) {
+  const { store } = ctx, T = testState(store);
+  if (!T.vs.length && !T.closes.length && !T.lock) return null;
+  const by = {}; for (const v of T.vs) by[v.t] = (by[v.t] || 0) + 1;
+  const ds = T.vs.map(v => v.d).filter(Boolean).sort();
+  return h('section', { class: 'page' },
+    h('div', { class: 'ph' }, h('h2', null, 'في النظام بيانات قبل الافتتاح'), h('div', { class: 'meta' }, T.vs.length + ' سنداً فعّالاً' + (ds.length ? '، من ' + dmy(ds[0]) + ' إلى ' + dmy(ds[ds.length - 1]) : ''))),
+    ...Object.entries(by).map(([t, n]) => h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, typeName(t))), h('span', { class: 'v num' }, String(n)))),
+    T.lock ? h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, 'فترة مقفلة')), h('span', { class: 'v' }, 'حتى ' + dmy(T.lock))) : null,
+    h('p', { class: 'muted', style: { fontSize: '14px', margin: '10px 4px' } }, 'إن كانت هذه بيانات تجربة، ألغِها كلها قبل استيراد الأرصدة الحقيقية حتى لا تدخل في الحسابات.'),
+    h('button', { class: 'btn ghost wide', style: { color: 'var(--red)' }, on: { click: () => resetTest(ctx, after) } }, icon('trash', 20), 'إلغاء بيانات التجربة'));
+}
+function resetTest(ctx, after) {
+  const { store } = ctx, T = testState(store);
+  const chosen = new Set([...T.parties.map(p => 'p:' + p.id), ...T.items.map(i => 'i:' + i.id)]);
+  const word = h('input', { type: 'text', autocomplete: 'off', placeholder: 'تصفير' });
+  const prog = h('div', { class: 'muted', style: { minHeight: '22px', margin: '6px 4px' } });
+  const pick = (k, label) => h('label', { class: 'field', style: { display: 'flex', gap: '10px', alignItems: 'center' } },
+    h('input', { type: 'checkbox', checked: true, style: { width: '22px', minHeight: '22px' }, on: { change: e => { if (e.target.checked) chosen.add(k); else chosen.delete(k); } } }), label);
+  const go = h('button', { class: 'btn danger' }, 'نسخة احتياطية ثم إلغاء');
+  const s = sheet('إلغاء بيانات التجربة', h('div', null,
+    h('p', { class: 'lead' }, 'يُلغى كل سند فعّال (' + T.vs.length + ')، بما فيه أي قيد افتتاحي، فتصبح كل الأرصدة والمخزون صفراً' + (T.lock || T.closes.length ? '، وتُفتح الفترة المقفلة' : '') + '. يبدأ ترقيم السندات من 1.'),
+    h('p', { class: 'muted', style: { fontSize: '14px' } }, 'لا يُحذف شيء: السندات تبقى في السجل ملغاة بسبب «' + RESET_WHY + '». تُحفظ أولاً نسخة احتياطية كاملة، وإن لم تُحفظ لا يُلغى شيء.'),
+    T.parties.length + T.items.length ? h('div', null,
+      h('h3', { class: 'sect' }, 'أُضيفت يدوياً في التطبيق (تُوقف ولا تُحذف)'),
+      ...T.parties.map(p => pick('p:' + p.id, p.n + ' (' + (PARTY_TYPES[p.t] || p.t) + ')')),
+      ...T.items.map(i => pick('i:' + i.id, i.n + ' (صنف)')),
+      h('p', { class: 'muted', style: { fontSize: '13px' } }, 'أزل العلامة عن أي اسم أو صنف حقيقي تريد بقاءه.')) : null,
+    field('للتأكيد اكتب كلمة «تصفير»', word),
+    prog,
+    h('div', { class: 'actions' }, go, h('button', { class: 'btn ghost', on: { click: () => s.close() } }, 'رجوع'))), { tall: true });
+  go.addEventListener('click', async () => {
+    if (word.value.trim() !== 'تصفير') { toast('اكتب كلمة «تصفير» للتأكيد', { bad: true }); return; }
+    go.disabled = true;
+    try {
+      prog.textContent = 'حفظ النسخة الاحتياطية…';
+      if ((await backupAll(ctx, true)) !== 'ok') { prog.textContent = 'لم تُحفظ النسخة الاحتياطية، فلم يُلغَ شيء.'; go.disabled = false; return; }
+      const who = { by: store.user.uid, bn: store.user.name };
+      let n = 0;
+      for (const v of T.vs) {
+        await store.put('v', v.id, { st: 'void', vd: Object.assign({ at: Date.now(), why: RESET_WHY, reset: 1 }, who) }, true);
+        prog.textContent = 'إلغاء السندات ' + (++n) + ' من ' + T.vs.length;
+      }
+      for (const c of T.closes) await store.put('meta', c.id, { reopened: Object.assign({ at: Date.now(), why: RESET_WHY }, who) }, true);
+      if (T.lock || T.closes.length) await store.put('meta', 'settings', Object.assign({}, store.settings, { kind: 'settings', lock: '' }));
+      for (const k of chosen) await store.put(k[0] === 'p' ? 'parties' : 'items', k.slice(2), { act: false }, true);
+      await store.put('meta', 'lock_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        Object.assign({ kind: 'lockLog', action: 'reset', date: today(), prev: T.lock, n: T.vs.length, off: chosen.size, why: RESET_WHY, at: Date.now() }, who));
+      toast('أُلغيت سندات التجربة (' + T.vs.length + ')' + (chosen.size ? ' وأُوقفت الأسماء والأصناف المختارة (' + chosen.size + ')' : '') + '. انتظر حتى يكتمل الرفع.');
+      s.close();
+      after();
+    } catch (e) { prog.textContent = 'تعذّر: ' + (e.code || e.message); go.disabled = false; }
+  });
 }
 
 /* ---------- كل السندات ---------- */
@@ -66,7 +138,9 @@ export function vouchersView(ctx) {
   const g = GROUPS.find(x => x[0] === VF.g);
   const n = norm(VF.q);
   const mine = ctx.can('sup') ? null : ['sale', 'sret', 'pur', 'rcpt'];
-  let list = [...store.vouchers.values()].filter(v => (!mine || mine.includes(v.t)) && (!g[2] || g[2].includes(v.t)) && (!n || norm([v.no, typeName(v.t), partyName(store, v.pt), v.m, v.inv].join(' ')).includes(n)));
+  let hid = 0;
+  let list = [...store.vouchers.values()].filter(v => { if (isResetVoid(v)) { hid++; return false; } return true; })
+    .filter(v => (!mine || mine.includes(v.t)) && (!g[2] || g[2].includes(v.t)) && (!n || norm([v.no, typeName(v.t), partyName(store, v.pt), v.m, v.inv].join(' ')).includes(n)));
   list.sort((a, b) => (b.d + b.at) > (a.d + a.at) ? 1 : -1);
   const box = h('section', { class: 'page tight' });
   let lastD = '';
@@ -76,7 +150,7 @@ export function vouchersView(ctx) {
   }
   if (!list.length) put(box, h('p', { class: 'empty' }, 'لا سندات.'));
   return {
-    title: 'كل السندات', sub: list.length + ' سند', live: true,
+    title: 'كل السندات', sub: list.length + ' سند' + (hid && ctx.can('sup') ? '، و' + hid + ' سند تجربة ملغى لا يظهر' : ''), live: true,
     el: h('div', null,
       h('input', { type: 'search', value: VF.q, placeholder: 'رقم السند أو الاسم أو البيان', on: { change: e => { VF.q = e.target.value; ctx.redraw(); } } }),
       h('div', { class: 'chips', style: { marginTop: '10px' } }, GROUPS.filter(x => ctx.can('sup') || x[0] !== 'i').map(([k, l]) => h('button', { class: 'chip' + (VF.g === k ? ' set' : ''), on: { click: () => { VF.g = k; ctx.redraw(); } } }, l))),
@@ -339,6 +413,8 @@ export function importView(ctx) {
       creating = true; try { await makeOpening2(base); } finally { creating = false; }
       return;
     }
+    const others = [...store.vouchers.values()].filter(x => x.st !== 'void' && x.t !== 'open');
+    if (others.length && !(await confirmBox('سندات موجودة قبل الافتتاح', 'في النظام ' + others.length + ' سنداً فعّالاً (بيع أو شراء أو غيرها) ستدخل في الحسابات مع الأرصدة الافتتاحية. إن كانت للتجربة فارجع وألغِها بزر «إلغاء بيانات التجربة» أعلى الصفحة. أكمل رغم ذلك؟', 'أكمل', true))) return;
     if (pkg.asof && D.d !== pkg.asof && !(await confirmBox('تاريخ القيد يخالف تاريخ الملف', 'الملف بتاريخ ' + dmy(pkg.asof) + ' وتاريخ القيد المختار ' + dmy(D.d) + '. الأرصدة تُنسب للتاريخ الذي تختاره. أكمل؟', 'متابعة', true))) return;
     creating = true; try { await makeOpening2(); } finally { creating = false; }
   }
@@ -362,7 +438,8 @@ export function importView(ctx) {
   return {
     title: 'الأرصدة الافتتاحية',
     el: h('div', null,
-      h('p', { class: 'lead' }, 'اختر ملف الأرصدة الافتتاحية (pharmacy_opening.json) الذي جهّزناه من نسخة BetaSys بعد مراجعة الديون.'),
+      resetBox(ctx, () => ctx.redraw()),
+      h('p', { class: 'lead' }, 'اختر ملف الأرصدة الافتتاحية (pharm-opening.json) الذي جهّزناه من نسخة BetaSys بعد مراجعة الديون.'),
       h('label', { class: 'btn ghost wide' }, icon('doc', 20), 'اختيار ملف الأرصدة', file), out)
   };
 }

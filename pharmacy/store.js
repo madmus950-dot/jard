@@ -192,7 +192,8 @@ export class Store {
   async nextNo(t) {
     const code = await this.deviceCode();
     let max = 0; const pre = code + '-';
-    for (const v of this.data.v.values()) if (v.t === t && v.no && v.no.startsWith(pre)) { const n = parseInt(v.no.slice(pre.length), 10); if (n > max) max = n; }
+    // سندات التجربة الملغاة بالتصفير لا تُحسب: الترقيم الفعلي يبدأ من 1
+    for (const v of this.data.v.values()) if (v.t === t && v.no && v.no.startsWith(pre) && !(v.st === 'void' && v.vd && v.vd.reset)) { const n = parseInt(v.no.slice(pre.length), 10); if (n > max) max = n; }
     return pre + (max + 1);
   }
 

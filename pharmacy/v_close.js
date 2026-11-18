@@ -144,7 +144,7 @@ export function closeView(ctx) {
       h('h3', { class: 'sect' }, 'سجل الإقفال والفتح'),
       h('section', { class: 'page tight' }, (() => {
         const L = [...store.data.meta.values()].filter(m => m.kind === 'lockLog').sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 30);
-        return L.length ? L.map(m => h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, (m.action === 'close' ? 'إقفال حتى ' : 'إعادة فتح ') + dmy(m.date)), h('small', null, m.bn + '، ' + when(m.at) + (m.why ? '، السبب: ' + m.why : ''))))) : [h('p', { class: 'empty' }, 'لا عمليات بعد.')];
+        return L.length ? L.map(m => h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, m.action === 'reset' ? 'تصفير بيانات التجربة (' + (m.n || 0) + ' سنداً) في ' + dmy(m.date) : (m.action === 'close' ? 'إقفال حتى ' : 'إعادة فتح ') + dmy(m.date)), h('small', null, m.bn + '، ' + when(m.at) + (m.why ? '، السبب: ' + m.why : ''))))) : [h('p', { class: 'empty' }, 'لا عمليات بعد.')];
       })()));
     // فحص السلامة بعد رسم الشاشة (يحسب البصمات)
     const bad = await integrity(store);
