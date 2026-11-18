@@ -16,7 +16,12 @@ let detP = null;
 function detector() {
   if (!detP) detP = (async () => {
     if (!('BarcodeDetector' in window)) return null;
-    try { const sup = await BarcodeDetector.getSupportedFormats(); const f = FORMATS.filter(x => sup.includes(x)); return f.length ? new BarcodeDetector({ formats: f }) : null; }
+    try {
+      // بعض الأجهزة لا تجيب على هذا الطلب أبداً: بعد ثانيتين نستعمل ZXing
+      const sup = await Promise.race([BarcodeDetector.getSupportedFormats(), sleep(2000).then(() => null)]);
+      if (!sup) return null;
+      const f = FORMATS.filter(x => sup.includes(x)); return f.length ? new BarcodeDetector({ formats: f }) : null;
+    }
     catch (e) { return null; }
   })();
   return detP;
@@ -31,15 +36,62 @@ export function beep(hi) {
   } catch (e) {}
 }
 
-/** يشغّل الكاميرا الخلفية بأعلى دقة مناسبة لقراءة النص */
-export async function startCamera(video) {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+/** ينتظر أول صورة فعلية من الكاميرا (بعض الأجهزة تفتح الكاميرا ولا ترسل صوراً بدقة معيّنة) */
+function frames(video, ms) {
+  return new Promise(ok => {
+    let done = false;
+    const fin = v => { if (done) return; done = true; clearInterval(iv); clearTimeout(t); ok(v); };
+    const iv = setInterval(() => { if (video.videoWidth > 0 && video.readyState >= 2) fin(true); }, 150);
+    const t = setTimeout(() => fin(video.videoWidth > 0), ms);
+  });
+}
+/** طلب الكاميرا مع مهلة: إن علق الطلب لا تبقى الشاشة معلّقة */
+function ask(video, ms) {
+  return new Promise((ok, no) => {
+    let out = false;
+    const t = setTimeout(() => { out = true; no(Object.assign(new Error('timeout'), { name: 'TimeoutError' })); }, ms);
+    navigator.mediaDevices.getUserMedia({ audio: false, video }).then(s => { clearTimeout(t); if (out) s.getTracks().forEach(x => x.stop()); else ok(s); }, e => { clearTimeout(t); if (!out) no(e); });
+  });
+}
+
+/**
+ * يشغّل الكاميرا الخلفية. يبدأ بدقة 1280×720 (تعمل على كل الأجهزة)، وإن لم تصل صور يجرب إعدادات أبسط.
+ * onState(text) لعرض الحالة على الشاشة.
+ */
+export async function startCamera(video, onState) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error('no-media'), { name: 'NotSupportedError' });
+  video.setAttribute('playsinline', ''); video.setAttribute('autoplay', ''); video.setAttribute('muted', '');
+  video.muted = true; video.autoplay = true;
+  const tries = [
+    { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+    { facingMode: { ideal: 'environment' } },
+    true
+  ];
+  let last = null;
+  for (let k = 0; k < tries.length; k++) {
+    let stream = null;
+    try { stream = await ask(tries[k], k === 0 ? 30000 : 10000); }
+    catch (e) {
+      last = e;
+      if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError' || e.name === 'NotFoundError')) throw e;
+      if (onState) onState('جارٍ تجربة إعداد آخر للكاميرا…');
+      continue;
+    }
+    video.srcObject = stream;
+    try { const pp = video.play(); if (pp && pp.catch) pp.catch(() => {}); } catch (e) {}
+    if (await frames(video, 5000)) return wrap(video, stream);
+    stream.getTracks().forEach(t => t.stop()); video.srcObject = null;
+    last = Object.assign(new Error('no-frames'), { name: 'NoFramesError' });
+    if (onState) onState('جارٍ تجربة إعداد آخر للكاميرا…');
+    await sleep(300);
+  }
+  throw last || new Error('camera');
+}
+function wrap(video, stream) {
   const track = stream.getVideoTracks()[0];
   let caps = {};
   try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch (e) {}
-  try { if (caps.focusMode && caps.focusMode.includes('continuous')) await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch (e) {}
-  video.setAttribute('playsinline', ''); video.muted = true; video.srcObject = stream;
-  try { await video.play(); } catch (e) {}
   let torchOn = false, zoomV = caps.zoom ? (caps.zoom.min || 1) : 1;
   return {
     stream, track,

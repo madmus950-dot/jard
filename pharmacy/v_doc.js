@@ -1,6 +1,6 @@
 /* فاتورة البيع والشراء والمرتجعات: مسح أو بحث ← سطر ← حفظ. المسودة تبقى محفوظة لو أُغلق التطبيق. */
-import { h, $, icon, toast, picker, numField, confirmBox, field, put, wide } from './ui.js';
-import { money, price as fp, qty, num, today, parseExp, dmy } from './util.js';
+import { h, $, icon, toast, picker, numField, confirmBox, field, put, wide, seg } from './ui.js';
+import { money, price as fp, qty, num, today, parseExp, dmy, norm } from './util.js';
 import { totals, check, STORES, partyBalance } from './engine.js';
 import { findBarcode, findCode, parseCode, linkBarcode, searchItems, units, stockOf, nearestExp, expTag, qtyText, cashAccounts, partyRows, partyFilter, partyName, avgCost, printVoucher, balWords } from './common.js';
 import { scanButton, inlineScanner } from './scan.js';
@@ -23,6 +23,9 @@ export function docView(ctx, t) {
   const { store } = ctx, M = META[t];
   if (!ctx.can(t)) return { title: M.title, el: h('div', { class: 'note bad' }, 'ليس لديك صلاحية لهذا المستند.') };
   let D = load(t);
+  const anyStore = ctx.can('store-any');   // المشرف فقط يختار المخزن، والكاشير على الصيدلية
+  D.s = anyStore && +D.s === 2 ? 2 : 1;
+  if (!anyStore) D.ln.forEach(l => { l.s = 1; });
   if (!D.ln.length && D.d !== today()) D.d = today();
   const isBuy = t === 'pur' || t === 'pret', isSale = !isBuy;
   const P = M.price;   // p = سعر البيع، c = التكلفة
@@ -34,6 +37,12 @@ export function docView(ctx, t) {
   const foot = h('footer', { class: 'foot' });
   const extra = h('div');
 
+  /* تنبيه: غير متوفر في المخزن المختار ويوجد في الآخر */
+  const elsewhere = (it, l, need) => {
+    const os = +l.s === 2 ? 1 : 2, have = stockOf(store.L, l.i, +l.s === 2 ? 2 : 1), oq = stockOf(store.L, l.i, os);
+    return need > have + 1e-9 && oq > 1e-9 ? h('span', { class: 'tag red' }, 'غير متوفر في ' + STORES[+l.s === 2 ? 2 : 1] + '، يوجد ' + qtyText(it, oq) + ' في ' + STORES[os]) : null;
+  };
+
   /* ---------- رأس الفاتورة ---------- */
   function drawHead() {
     head.textContent = '';
@@ -43,7 +52,7 @@ export function docView(ctx, t) {
       h('button', { class: 'chip' + (D.pay === 'credit' ? ' set' : ''), on: { click: () => { D.pay = D.pay === 'cash' ? 'credit' : 'cash'; if (D.pay === 'credit' && !D.pt) pickParty(); change(); } } },
         D.pay === 'cash' ? 'نقداً' : 'آجل'),
       h('label', { class: 'chip' }, icon('cal', 18), h('input', { type: 'date', value: D.d, style: { border: 0, minHeight: '30px', padding: 0, width: '128px', background: 'none' }, on: { change: e => { D.d = e.target.value || today(); change(); } } })),
-      h('button', { class: 'chip', on: { click: () => { D.s = D.s === 1 ? 2 : 1; D.ln.forEach(l => { l.s = D.s; }); change(); } } }, icon('box', 18), STORES[D.s]));
+      null);
     const boxes = cashAccounts(store);
     if (boxes.length > 1) put(head, h('button', { class: 'chip', on: { click: async () => { const a = await picker('الصندوق', boxes.map(b => ({ value: b.id, label: b.n }))); if (a) { D.ca = a; change(); } } } }, icon('wallet', 18), (store.accounts.get(D.ca) || {}).n || 'الصندوق'));
   }
@@ -102,9 +111,9 @@ export function docView(ctx, t) {
     const found = searchItems(store, q, 12), L = store.L;
     if (!found.length) { put(sugg, h('p', { class: 'empty', style: { padding: '12px' } }, /^\d{5,}$/.test(q) ? 'اضغط إدخال للبحث بالباركود' : 'لا يوجد صنف بهذا الاسم')); }
     for (const it of found) {
-      const st = stockOf(store.L, it.id, D.s), u0 = units(it)[0];
+      const st = stockOf(store.L, it.id, D.s), u0 = units(it)[0], os = D.s === 1 ? 2 : 1, oq = stockOf(store.L, it.id, os);
       put(sugg, h('button', { type: 'button', on: { click: () => addItem(it, 0) } },
-        h('span', null, h('b', { style: { fontWeight: 500 } }, it.n), h('small', null, [it.co, qtyText(it, st) + ' في ' + STORES[D.s]].filter(Boolean).join('، '))),
+        h('span', null, h('b', { style: { fontWeight: 500 } }, it.n), h('small', null, [it.co, qtyText(it, st) + ' في ' + STORES[D.s], t === 'sale' && st <= 1e-9 && oq > 1e-9 ? 'يوجد ' + qtyText(it, oq) + ' في ' + STORES[os] : ''].filter(Boolean).join('، '))),
         h('span', { class: 'num', style: { fontWeight: 600 } }, fp(isSale ? u0.p : avgCost(L, store, it.id) * u0.s))));
     }
     sugg.classList.remove('hide');
@@ -163,6 +172,7 @@ export function docView(ctx, t) {
       if (isSale && t === 'sale') {
         const need = (+l.q || 0) * l.z;
         put(info, h('span', { class: need > have + 1e-9 ? 'red' : '' }, 'المتوفر ' + qtyText(it, have)));
+        put(info, elsewhere(it, l, need));
         const x = nearestExp(L, l.i, l.s); if (x) put(info, expTag(x, D.d));
         const cost = avgCost(L, store, l.i) * l.z;
         if (ctx.can('profit') && cost && price < cost) put(info, h('span', { class: 'tag red' }, 'أقل من التكلفة ' + money(cost)));
@@ -199,6 +209,7 @@ export function docView(ctx, t) {
       if (t === 'sale') {
         const need = (+l.q || 0) * l.z;
         put(info, h('span', { class: need > have + 1e-9 ? 'red' : '' }, 'المتوفر ' + qtyText(it, have)));
+        put(info, elsewhere(it, l, need));
         const x = nearestExp(L, l.i, l.s); if (x) put(info, expTag(x, D.d));
         const cost = avgCost(L, store, l.i) * l.z;
         if (ctx.can('profit') && cost && price < cost) put(info, h('span', { class: 'tag red' }, 'أقل من التكلفة ' + money(cost)));
@@ -222,6 +233,7 @@ export function docView(ctx, t) {
   /* ---------- الإجمالي والحفظ ---------- */
   function draft() {
     const v = { t, d: D.d, ca: D.ca, ln: D.ln.filter(l => (+l.q || 0) > 0 || (+l.f || 0) > 0).map(l => clean(l)), ds: Math.max(0, num(D.ds)), m: (D.m || '').trim() };
+    if (!anyStore) v.ln.forEach(l => { l.s = 1; });
     const tt = totals(v);
     v.pd = D.pay === 'cash' ? tt.tot : Math.max(0, Math.min(num(D.pd), tt.tot));
     if (D.pt) v.pt = D.pt;
@@ -284,7 +296,8 @@ export function docView(ctx, t) {
       const L = store.L, need = new Map();
       for (const l of v.ln) need.set(l.i + '|' + l.s, (need.get(l.i + '|' + l.s) || 0) + l.q * l.z);
       const short = [...need].filter(([k, q]) => { const [i, s] = k.split('|'); return q > stockOf(L, i, +s) + 1e-9; });
-      if (short.length && !(await confirmBox('الكمية أكبر من المتوفر', short.length + ' صنف كميته في الفاتورة أكبر مما في ' + STORES[D.s] + ' حسب الدفتر. احفظ إن كان الصنف موجوداً فعلاً، ثم صحّح المخزون بالجرد.', 'حفظ على أي حال'))) return;
+      const other = short.filter(([k]) => { const [i, s2] = k.split('|'); return stockOf(L, i, +s2 === 2 ? 1 : 2) > 1e-9; }).map(([k]) => { const i = k.split('|')[0], it = store.items.get(i); return it ? it.n : i; });
+      if (short.length && !(await confirmBox('الكمية أكبر من المتوفر', short.length + ' صنف كميته في الفاتورة أكبر مما في ' + STORES[D.s] + ' حسب الدفتر.' + (other.length ? ' منها موجود في ' + STORES[D.s === 1 ? 2 : 1] + ': ' + other.slice(0, 5).join('، ') + (other.length > 5 ? '…' : '') + '.' : '') + ' احفظ إن كان الصنف موجوداً فعلاً، ثم صحّح المخزون بالجرد.', 'حفظ على أي حال'))) return;
     }
     saving = true;
     try {
@@ -308,6 +321,97 @@ export function docView(ctx, t) {
     field('ملاحظة', h('input', { value: D.m, on: { change: e => { D.m = e.target.value; persist(D); } } }))));
   else put(extra, field('ملاحظة (اختياري)', h('input', { value: D.m, on: { change: e => { D.m = e.target.value; persist(D); } } })));
 
+  /* ---------- استيراد أصناف الفاتورة من ملف CSV (نفس صيغة تصدير الفاتورة) ---------- */
+  const fileIn = h('input', { type: 'file', accept: '.csv,.txt,text/csv,text/plain', style: { display: 'none' }, on: { change: async e => {
+    const f = e.target.files && e.target.files[0]; e.target.value = '';
+    if (f) await importFile(f);
+  } } });
+  async function importFile(f) {
+    let txt;
+    try {
+      const buf = await f.arrayBuffer();
+      txt = new TextDecoder('utf-8').decode(buf);
+      if (txt.includes('�')) txt = new TextDecoder('windows-1256').decode(buf);
+    } catch (x) { toast('تعذّرت قراءة الملف', { bad: true }); return; }
+    const rows = parseCsv(txt);
+    const res = rowsToLines(rows);
+    if (res.err) { toast(res.err, { bad: true }); return; }
+    if (!res.ok.length) { toast('لم يُستورد أي صنف من الملف', { bad: true }); await report(res, 0); return; }
+    if (D.ln.length && !(await confirmBox('استيراد من ملف', 'ستُضاف ' + res.ok.length + ' سطراً إلى سطور الفاتورة الحالية. أكمل؟', 'استيراد'))) return;
+    for (const l of res.ok) D.ln.unshift(l);
+    change();
+    toast('استُوردت ' + res.ok.length + ' سطراً');
+    await report(res, res.ok.length);
+  }
+  async function report(res, n) {
+    const bad = [];
+    if (res.miss.length) bad.push(res.miss.length + ' صنف غير موجود في النظام (أضفه بالمسح أو البحث ثم أعد الاستيراد): ' + res.miss.slice(0, 8).join('، ') + (res.miss.length > 8 ? '…' : ''));
+    if (res.unit.length) bad.push(res.unit.length + ' صنف وحدته غير معروفة فاعتُمدت الوحدة الأولى، راجع الوحدة والتكلفة: ' + res.unit.slice(0, 6).join('، ') + (res.unit.length > 6 ? '…' : ''));
+    if (res.exp.length) bad.push('صلاحية غير مفهومة في: ' + res.exp.slice(0, 6).join('، ') + (res.exp.length > 6 ? '…' : ''));
+    if (bad.length) await confirmBox('ملاحظات على الاستيراد', (n ? 'استُورد ' + n + ' سطراً. ' : '') + bad.join(' — '), 'حسناً');
+  }
+  function parseCsv(txt) {
+    txt = txt.replace(/^﻿/, '');
+    const first = txt.split(/\r?\n/, 1)[0] || '';
+    const dl = [',', ';', '\t'].map(c => [c, first.split(c).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const out = []; let row = [], cur = '', q = false;
+    for (let i = 0; i < txt.length; i++) {
+      const c = txt[i];
+      if (q) { if (c === '"') { if (txt[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+      else if (c === '"') q = true;
+      else if (c === dl) { row.push(cur); cur = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && txt[i + 1] === '\n') i++; row.push(cur); cur = ''; if (row.some(x => x.trim() !== '')) out.push(row); row = []; }
+      else cur += c;
+    }
+    row.push(cur); if (row.some(x => x.trim() !== '')) out.push(row);
+    return out;
+  }
+  const toExp = s0 => {
+    const s = String(s0 || '').trim().replace(/[٠-٩]/g, c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c));
+    if (!s) return '';
+    let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);       // يوم/شهر/سنة (أو شهر/يوم/سنة إن كان الأوسط أكبر من 12)
+    if (m) return parseExp((+m[2] > 12 && +m[1] <= 12 ? m[1] : m[2]) + '/' + m[3]);
+    m = s.match(/^(\d{4})[\/\-.](\d{1,2})(?:[\/\-.]\d{1,2})?(?:[T ].*)?$/);   // سنة-شهر-يوم
+    if (m) return parseExp(m[2] + '/' + m[1]);
+    return parseExp(s);
+  };
+  function rowsToLines(rows) {
+    if (rows.length < 1) return { err: 'الملف فارغ' };
+    const KEYS = { code: ['رقم الصنف', 'رمز الصنف', 'الكود', 'كود الصنف', 'كود'], bc: ['الباركود', 'باركود'], name: ['اسم الصنف', 'الصنف', 'الاسم', 'اسم المادة', 'المادة'], unit: ['الوحدة', 'وحدة'], q: ['الكمية', 'كمية'], f: ['بونص', 'البونص'], c: ['التكلفة', 'سعر الشراء', 'سعر التكلفة', 'السعر', 'سعر الوحدة'], x: ['تاريخ الانتهاء', 'الصلاحية', 'الانتهاء', 'انتهاء الصلاحية'] };
+    const head = rows[0].map(x => norm(x)), col = {};
+    for (const k in KEYS) { const i = head.findIndex(h0 => KEYS[k].some(a => norm(a) === h0)); if (i >= 0) col[k] = i; }
+    let body = rows.slice(1);
+    if (col.q == null || (col.name == null && col.code == null && col.bc == null)) {
+      // لا رؤوس أعمدة: الترتيب المعتاد رقم، اسم، وحدة، كمية، بونص، تكلفة، مبلغ، صلاحية
+      if (rows[0].length >= 6 && !isNaN(num(rows[0][3]))) { Object.assign(col, { code: 0, name: 1, unit: 2, q: 3, f: 4, c: 5, x: 7 }); body = rows; }
+      else return { err: 'لم أجد أعمدة «اسم الصنف» و«الكمية» في الملف. استخدم ملف تصدير فاتورة الشراء.' };
+    }
+    const byName = new Map(), bySrc = new Map();
+    for (const it of store.items.values()) { if (it.act === false) continue; byName.set(norm(it.n), it); if (it.src) bySrc.set(String(it.src).trim(), it); }
+    const g = (r, k) => col[k] == null ? '' : String(r[col[k]] == null ? '' : r[col[k]]).trim();
+    const res = { ok: [], miss: [], unit: [], exp: [] };
+    for (const r of body) {
+      const code = g(r, 'code'), bcv = g(r, 'bc'), nm = g(r, 'name');
+      const qv = num(g(r, 'q')), fv = num(g(r, 'f'));
+      if (!code && !bcv && !nm) continue;
+      if (!(qv > 0) && !(fv > 0)) continue;
+      let it = (code && (store.items.get(code) || bySrc.get(code))) || null, uIdx = null;
+      if (!it && code) { const f = findCode(store, code); if (f && f.it) { it = f.it; uIdx = f.u; } }
+      if (!it && bcv) { const f = findCode(store, bcv); if (f && f.it) { it = f.it; uIdx = f.u; } }
+      if (!it && nm) it = byName.get(norm(nm)) || null;
+      if (!it) { res.miss.push(nm || code || bcv); continue; }
+      const us = units(it), un = g(r, 'unit');
+      let ui = us.findIndex(u => norm(u.n) === norm(un));
+      if (ui < 0) { if (un && uIdx == null) res.unit.push(it.n); ui = uIdx != null ? uIdx : 0; }
+      const u = us[ui] || us[0];
+      const cs = g(r, 'c'), cost = cs !== '' ? num(cs) : Math.round(avgCost(store.L, store, it.id) * u.s * 100) / 100;
+      const xs = g(r, 'x'), x = toExp(xs);
+      if (xs && !x) res.exp.push(it.n);
+      res.ok.push({ i: it.id, n: it.n, u: ui, z: u.s, q: qv, s: D.s, c: cost, f: fv > 0 ? fv : 0, x });
+    }
+    return res;
+  }
+
   // الكاميرا المدمجة: تبقى مفتوحة فوق الفاتورة وتضيف كل صنف يُمسح
   const camHost = h('div');
   let cam = null;
@@ -317,9 +421,16 @@ export function docView(ctx, t) {
   }
 
   drawHead(); drawLines(); drawFoot();
-  const el = h('div', null, head,
+  /* اختيار المخزن: الصيدلية أو المخزن (يُطبَّق على كل سطور الفاتورة) */
+  const storeLbl = { pur: 'إضافة الأصناف إلى', sret: 'إرجاع الأصناف إلى', sale: 'الصرف من', pret: 'الإرجاع من' }[t];
+  const storeBox = h('div', { class: 'field', style: { margin: '0 0 10px' } },
+    h('span', { class: 'flabel' }, storeLbl),
+    anyStore ? seg([[1, STORES[1]], [2, STORES[2]]], D.s, v => { D.s = v; D.ln.forEach(l => { l.s = v; }); change(); })
+      : h('div', { class: 'chip set' }, icon('box', 18), STORES[1]));
+  const el = h('div', null, head, storeBox,
     h('div', { class: 'scan' }, input, scanButton(code => lookup(code), input, { inline: toggleCam })),
     camHost,
+    isBuy ? h('div', { style: { margin: '0 0 10px' } }, h('button', { type: 'button', class: 'btn ghost sm', on: { click: () => fileIn.click() } }, icon('doc', 18), 'استيراد من ملف'), fileIn) : null,
     sugg, lines, extra);
   return {
     title: M.title, sub: D.ln.length ? 'مسودة محفوظة' : '', el, foot,

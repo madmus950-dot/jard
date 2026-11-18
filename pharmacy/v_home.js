@@ -3,6 +3,7 @@ import { h, icon } from './ui.js';
 import { today, longDate, monthsLeft, money } from './util.js';
 import { accBalance, partyBalance } from './engine.js';
 import { cashAccounts, voucherLine, emptyState } from './common.js';
+import { integrityBanner } from './v_close.js';
 
 export function home(ctx) {
   const { store } = ctx, L = store.L, d = today(), S = store.settings;
@@ -49,6 +50,7 @@ export function home(ctx) {
   return {
     title: 'اليوم', live: true,
     el: h('div', null,
+      integrityBanner(ctx),
       denied ? h('div', { class: 'note bad' }, ctx.can('settings')
         ? 'Firebase يرفض الوصول إلى بيانات الحسابات. انشر قواعد Firestore الجديدة (ملف firestore.rules) من لوحة Firebase، وسيتصل التطبيق وحده خلال دقيقة.'
         : 'لا صلاحية على بيانات الحسابات. اطلب من المشرف تفعيل حسابك.') : null,

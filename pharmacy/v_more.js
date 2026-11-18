@@ -1,6 +1,6 @@
 /* المزيد: المستندات، السجل، تفاصيل السند، الإعدادات، الاستيراد */
 import { h, icon, toast, field, numField, seg, confirmBox, sheet, put, wide } from './ui.js';
-import { money, price, qty, norm, dmy, today, num, r2, newId } from './util.js';
+import { money, price, qty, norm, dmy, today, num, r2, newId, parseExp } from './util.js';
 import { totals, check, TYPES, STORES, PARTY_TYPES, describe } from './engine.js';
 import { typeName, voucherLine, partyName, units, printVoucher, cashAccounts, exportVoucher } from './common.js';
 import { shareText, printHtml } from './out.js';
@@ -29,7 +29,8 @@ export function moreView(ctx) {
         h('a', { class: 'ln link', href: '#/reports' }, h('span', { class: 'k', style: { display: 'flex', gap: '12px', alignItems: 'center' } }, icon('report', 22), h('span', null, h('b', null, 'التقارير'), h('small', null, 'المبيعات، الصندوق، الديون، الصلاحيات، الأرباح'))), icon('fwd', 18))),
       h('h3', { class: 'sect' }, 'الحساب'),
       h('section', { class: 'page tight' },
-        it('settings', 'الإعدادات', 'اسم الصيدلية، الصناديق، المصروفات، المستخدمون، قفل الفترة', 'gear', 'settings'),
+        it('settings', 'الإعدادات', 'اسم الصيدلية، الصناديق، المصروفات، المستخدمون', 'gear', 'settings'),
+        it('settings', 'الإقفال والتدقيق', 'إقفال الشهر أو السنة، فحص سلامة الدفاتر، سجل الفتح والإقفال', 'doc', 'close'),
         it('import', 'الأرصدة الافتتاحية', 'استيراد الأصناف والأسماء والأرصدة', 'in', 'import'),
         h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, ctx.user.name), h('small', null, (ctx.user.role === 'admin' ? 'مشرف' : 'كاشير') + '، ', h('bdi', null, ctx.user.email))),
           h('button', { class: 'btn ghost sm', on: { click: async () => { if (ctx.store.status.pending && !(await confirmBox('سندات لم تُرفع', ctx.store.status.pending + ' سند لم يصل الخادم بعد. إن خرجت الآن تبقى على هذا الجهاز وتُرفع عند دخولك ثانية. اخرج؟', 'خروج'))) return; ctx.logout(); } } }, 'خروج'))),
@@ -168,9 +169,10 @@ export function settingsView(ctx) {
       field('عرض ورق الطابعة', seg([[58, '58 ملم'], [80, '80 ملم']], +S.pw || 58, v => { S.pw = v; })),
       desktopPrinter(),
       h('button', { class: 'btn wide', on: { click: () => save('حُفظت بيانات الصيدلية') } }, 'حفظ'),
+      h('p', { class: 'muted', style: { margin: '14px 4px 0', fontSize: '13px' } }, 'قاعدة البيانات المتصل بها: ', h('bdi', null, ((window.JARD_CONFIG || {}).firebase || {}).projectId || '؟'), (window.JARD_CONFIG || {}).env ? ' (اختبار)' : ' (إنتاج)'),
       h('h3', { class: 'sect' }, 'قفل الفترة'),
-      h('p', { class: 'muted', style: { margin: '0 4px 8px', fontSize: '14px' } }, 'بعد مراجعة شهر وإقفاله لا يمكن إضافة أو إلغاء أي سند بتاريخ فيه، فتبقى أرقامه ثابتة.'),
-      h('div', { class: 'row2' }, h('input', { type: 'date', value: S.lock || '', on: { change: e => { S.lock = e.target.value; } } }), h('button', { class: 'btn ghost', on: { click: () => save(S.lock ? 'أُقفلت الفترة حتى ' + dmy(S.lock) : 'أُلغي القفل') } }, 'حفظ القفل')),
+      h('p', { class: 'muted', style: { margin: '0 4px 8px', fontSize: '14px' } }, 'بعد إقفال فترة لا يمكن إضافة أو إلغاء أي سند بتاريخ فيها، فتبقى أرقامها ثابتة.'),
+      h('a', { class: 'ln link', href: '#/close' }, h('span', { class: 'k' }, h('b', null, S.lock ? 'مقفل حتى ' + dmy(S.lock) : 'لا توجد فترة مقفلة'), h('small', null, 'الإقفال وإعادة الفتح من شاشة «الإقفال والتدقيق» (فحوصات ولقطة وسجل تدقيق)')), icon('fwd', 18)),
       h('h3', { class: 'sect' }, 'الصناديق'), accList('cash'),
       h('button', { class: 'btn ghost wide', on: { click: () => addAcc('cash', 1102, 'اسم الصندوق الجديد (مثلاً: صندوق الإدارة، الكريمي)') } }, icon('plus', 18), 'صندوق جديد'),
       h('h3', { class: 'sect' }, 'أنواع المصروفات'), accList('exp'),
@@ -197,6 +199,49 @@ function desktopPrinter() {
 }
 
 /* ---------- الأرصدة الافتتاحية ---------- */
+/* ---------- فحص حزمة الأرصدة الافتتاحية: أي خطأ يمنع الرفع والقيد ---------- */
+export function validateOpening(pkg, store) {
+  const G = {}, W = {};
+  const bad = (m, who) => { (G[m] || (G[m] = [])).push(who); }, warn = (m, who) => { (W[m] || (W[m] = [])).push(who); };
+  const arr = k => Array.isArray(pkg[k]) ? pkg[k] : [];
+  for (const k of ['items', 'parties', 'stock']) if (!Array.isArray(pkg[k])) bad('ينقص الملف القسم ' + k, k);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(pkg.asof || '')) warn('الملف بلا تاريخ asof صحيح', 'asof');
+  const items = arr('items'), parties = arr('parties'), stock = arr('stock'), cash = arr('cash');
+  const dup = (list, label) => { const seen = new Set(); for (const x of list) { const k = x && x.id; if (k == null || k === '') { bad(label + ' بلا رقم', '؟'); continue; } if (seen.has(k)) bad(label + ' مكرر', k); seen.add(k); } };
+  dup(items, 'صنف'); dup(parties, 'طرف');
+  const ids = new Set(items.map(x => x && x.id));
+  for (const x of items) {
+    if (!x || !x.n) bad('صنف بلا اسم', x && x.id);
+    else if (!Array.isArray(x.u) || !x.u.length || +x.u[0].s !== 1 || x.u.some(u => !u.n || !(+u.s > 0))) bad('وحدات الصنف غير صحيحة (الوحدة الأولى حجمها 1 ولكل وحدة اسم وحجم)', x.n);
+    else if (!(+x.u[0].p > 0)) warn('صنف سعر بيعه صفر', x.n);
+  }
+  for (const p of parties) {
+    if (!p || !p.n) bad('طرف بلا اسم', p && p.id);
+    else if (!['c', 's', 'e', 'o'].includes(p.t)) bad('نوع طرف غير معروف (c عميل، s مورد، e موظف، o آخر)', p.n);
+    else if (p.b != null && !isFinite(+p.b)) bad('رصيد طرف غير رقمي', p.n);
+    else if (p.t === 's' && +p.b > 0) warn('مورد برصيد موجب (أي لنا عنده، وهو عكس المعتاد: المستحق للمورد يُكتب بالسالب)', p.n);
+    else if (p.t === 'c' && +p.b < 0) warn('عميل برصيد سالب (دائن)', p.n);
+  }
+  const seenSt = new Set();
+  for (const l of stock) {
+    const nm = (store.items.get(l.i) || items.find(x => x.id === l.i) || {}).n || l.i;
+    if (!ids.has(l.i) && !store.items.has(l.i)) bad('سطر مخزون لصنف غير موجود في الملف ولا في النظام', l.i);
+    if (!(+l.q > 0) || !isFinite(+l.q)) bad('كمية غير صحيحة في سطر مخزون', nm);
+    if (!isFinite(+l.c) || +l.c < 0) bad('تكلفة غير صحيحة في سطر مخزون', nm);
+    else if (+l.c === 0) warn('سطر مخزون بتكلفة صفر', nm);
+    if (l.s != null && ![1, 2, '1', '2'].includes(l.s)) bad('مخزن غير معروف (1 الصيدلية، 2 المخزن)', nm);
+    if (l.x && parseExp(l.x) !== l.x) warn('صلاحية بغير صيغة شهر/سنة (مثل 03/2028)', nm);
+    const k = l.i + '|' + (+l.s === 2 ? 2 : 1) + '|' + (l.x || ''); if (seenSt.has(k)) warn('سطران لنفس الصنف والمخزن والصلاحية', nm); seenSt.add(k);
+  }
+  for (const c of cash) {
+    const a = store.accounts.get(c.ca);
+    if (!a || a.k !== 'cash') bad('صندوق غير موجود في الإعدادات (أنشئه أولاً وانسخ رقمه)', String(c.ca));
+    if (!isFinite(+c.b)) bad('رصيد صندوق غير رقمي', String(c.ca));
+  }
+  const fmt = (o, pre) => Object.entries(o).map(([m, w]) => pre + m + ' (' + w.length + '): ' + w.slice(0, 4).join('، ') + (w.length > 4 ? '…' : ''));
+  return { err: fmt(G, ''), warn: fmt(W, '') };
+}
+
 export function importView(ctx) {
   const { store, be } = ctx;
   if (!ctx.can('import')) return { title: 'الأرصدة الافتتاحية', el: h('div', { class: 'note bad' }, 'للمشرف فقط.') };
@@ -206,9 +251,11 @@ export function importView(ctx) {
     const f = e.target.files && e.target.files[0]; if (!f) return;
     try { pkg = JSON.parse(await f.text()); if (pkg.kind !== 'pharm-opening') throw new Error('kind'); }
     catch (x) { pkg = null; out.textContent = ''; put(out, h('div', { class: 'note bad' }, 'الملف ليس ملف أرصدة افتتاحية صحيحاً (' + f.name + ').')); return; }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(pkg.asof || '')) D.d = pkg.asof;
     drawPkg();
   } } });
-  const D = { d: '2027-01-01', stock: true, parties: true, cash: true };
+  const D = { d: today(), stock: true, parties: true, cash: true };
+  let creating = false;
   function drawPkg() {
     out.textContent = '';
     const nC = pkg.parties.filter(p => p.t === 'c').length, nS = pkg.parties.filter(p => p.t === 's').length;
@@ -216,18 +263,25 @@ export function importView(ctx) {
     const recv = r2(pkg.parties.filter(p => p.b > 0).reduce((s, p) => s + p.b, 0)), pay = r2(-pkg.parties.filter(p => p.b < 0).reduce((s, p) => s + p.b, 0));
     const cash = r2((pkg.cash || []).reduce((s, x) => s + x.b, 0));
     const newItems = pkg.items.filter(x => !store.items.has(x.id)).length, newParties = pkg.parties.filter(x => !store.parties.has(x.id)).length;
-    const status = h('div');
-    put(out, 
+    const status = h('div'), V = validateOpening(pkg, store);
+    const sv = k => r2(pkg.stock.filter(x => (+x.s === 2 ? 2 : 1) === k).reduce((t, x) => t + x.q * x.c, 0));
+    const sn = k => pkg.stock.filter(x => (+x.s === 2 ? 2 : 1) === k).length;
+    put(out,
+      V.err.length ? h('div', { class: 'note bad' }, h('b', null, 'أخطاء تمنع الرفع والقيد:'), ...V.err.map(e => h('div', null, '• ' + e))) : h('div', { class: 'note good' }, '✓ الحزمة سليمة البنية'),
+      V.warn.length ? h('div', { class: 'note' }, h('b', null, 'تنبيهات للمراجعة:'), ...V.warn.map(e => h('div', null, '• ' + e))) : null,
       h('section', { class: 'page' },
         h('div', { class: 'ph' }, h('h2', null, 'ملف ' + (pkg.src || '')), h('div', { class: 'meta' }, 'أرصدة بتاريخ ' + dmy(pkg.asof || ''))),
         lnx('الأصناف', pkg.items.length + (newItems < pkg.items.length ? ' (' + newItems + ' جديد)' : '')),
         lnx('العملاء', nC), lnx('الموردون', nS), lnx('موظفون وغيرهم', pkg.parties.length - nC - nS),
         lnx('المخزون بالتكلفة', money(stockV) + ' (' + pkg.stock.length + ' سطر)'),
+        lnx('· في الصيدلية', money(sv(1)) + ' (' + sn(1) + ' سطر)'), lnx('· في المخزن', money(sv(2)) + ' (' + sn(2) + ' سطر)'),
         lnx('لنا عند العملاء وغيرهم', money(recv)), lnx('علينا للموردين وغيرهم', money(pay)), lnx('النقدية', money(cash)),
         lnx('رأس المال الناتج', money(r2(stockV + recv + cash - pay)), 'green')),
       h('h3', { class: 'sect' }, '1. الأصناف والأسماء'),
       h('p', { class: 'muted', style: { margin: '0 4px 8px', fontSize: '14px' } }, 'تُضاف الأصناف (بالباركود والوحدات والأسعار) والأسماء دون أرصدة. يمكن تكرار هذه الخطوة بأمان.'),
-      h('button', { class: 'btn wide', on: { click: async e => {
+      h('button', { class: 'btn wide', disabled: V.err.length > 0, on: { click: async e => {
+        const nOld = pkg.items.filter(x => store.items.has(x.id)).length + pkg.parties.filter(x => store.parties.has(x.id)).length;
+        if (nOld && !(await confirmBox('تحديث بيانات موجودة', nOld + ' صنف أو اسم موجود سيُحدَّث بقيم الملف (الأسعار والباركود والوحدات والأسماء)، فتُفقد أي تعديلات أُجريت عليها في التطبيق. أكمل فقط إن كنت تقصد ذلك.', 'تحديث', true))) return;
         e.target.disabled = true;
         try {
           status.textContent = 'جارٍ رفع الأصناف…';
@@ -243,11 +297,21 @@ export function importView(ctx) {
       h('p', { class: 'muted', style: { margin: '0 4px 8px', fontSize: '14px' } }, 'سند واحد بتاريخ بداية السنة: المخزون والأرصدة والنقدية، ورأس المال = الأصول − الالتزامات. يمكنك إلغاؤه وإعادته إن تغيرت الأرقام.'),
       field('تاريخ القيد', h('input', { type: 'date', value: D.d, on: { change: e => { D.d = e.target.value; } } })),
       chk('المخزون', 'stock'), chk('أرصدة العملاء والموردين', 'parties'), chk('النقدية', 'cash'),
-      h('button', { class: 'btn wide', on: { click: makeOpening } }, 'إنشاء القيد الافتتاحي'));
+      h('button', { class: 'btn wide', disabled: V.err.length > 0, on: { click: makeOpening } }, 'إنشاء القيد الافتتاحي'));
   }
   const lnx = (k, v, cls) => h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, k)), h('span', { class: 'v num ' + (cls || ''), style: { fontSize: '16px' } }, String(v)));
   const chk = (label, k) => h('label', { class: 'field', style: { display: 'flex', gap: '10px', alignItems: 'center' } }, h('input', { type: 'checkbox', checked: D[k], style: { width: '22px', minHeight: '22px' }, on: { change: e => { D[k] = e.target.checked; } } }), label);
   async function makeOpening() {
+    if (creating) return;
+    const V = validateOpening(pkg, store);
+    if (V.err.length) { toast('أصلح أخطاء الملف أولاً', { bad: true }); return; }
+    if (store.status.pending) { toast('انتظر اكتمال رفع السندات (' + store.status.pending + ') ثم أعد المحاولة', { bad: true }); return; }
+    const had = [...store.vouchers.values()].filter(x => x.t === 'open' && x.st !== 'void');
+    if (had.length) { toast('يوجد قيد افتتاحي فعّال. ألغِه من سجل السندات (بسبب مسجّل) قبل إنشاء بديل، منعاً للتكرار.', { bad: true }); return; }
+    if (pkg.asof && D.d !== pkg.asof && !(await confirmBox('تاريخ القيد يخالف تاريخ الملف', 'الملف بتاريخ ' + dmy(pkg.asof) + ' وتاريخ القيد المختار ' + dmy(D.d) + '. الأرصدة تُنسب للتاريخ الذي تختاره. أكمل؟', 'متابعة', true))) return;
+    creating = true; try { await makeOpening2(); } finally { creating = false; }
+  }
+  async function makeOpening2() {
     const missingI = pkg.stock.filter(x => !store.items.has(x.i)).length, missingP = pkg.parties.filter(p => p.b && !store.parties.has(p.id)).length;
     if ((D.stock && missingI) || (D.parties && missingP)) { toast('ارفع الأصناف والأسماء أولاً (الخطوة 1) وانتظر اكتمالها.', { bad: true }); return; }
     const v = { t: 'open', d: D.d, m: 'أرصدة افتتاحية من ' + (pkg.src || 'الملف') + ' بتاريخ ' + (pkg.asof || ''), ln: [], pb: [], cb: [] };
@@ -256,8 +320,6 @@ export function importView(ctx) {
     if (D.cash) v.cb = (pkg.cash || []).filter(x => x.b).map(x => ({ ca: store.accounts.has(x.ca) ? x.ca : '1101', b: x.b }));
     const err = check(v, { items: store.items, parties: store.parties, accounts: store.accounts, lock: store.settings.lock });
     if (err) { toast(err, { bad: true }); return; }
-    const exist = [...store.vouchers.values()].filter(x => x.t === 'open' && x.st !== 'void');
-    if (exist.length && !(await confirmBox('يوجد قيد افتتاحي', 'يوجد ' + exist.length + ' قيد افتتاحي سابق. سيُضاف قيد جديد فوقه، فألغِ القديم من السجل إن كان يكرر نفس الأرصدة. أكمل؟', 'إنشاء'))) return;
     const doc = await store.saveVoucher(v);
     toast('أُنشئ القيد الافتتاحي');
     ctx.go('vch/' + encodeURIComponent(doc.id));

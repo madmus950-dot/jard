@@ -1,0 +1,77 @@
+rules_version = '2';
+// قواعد حسابات الصيدلية. قارنها بقواعدك الحالية، جرّبها في Rules Playground، ثم انشرها.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null && request.auth.token.email != null; }
+    function staffPath() { return /databases/$(database)/documents/staff/$(request.auth.token.email.lower()); }
+    function isStaff() { return signedIn() && exists(staffPath()) && get(staffPath()).data.get('active', false) == true; }
+    function role() {
+      let s = get(staffPath()).data;
+      return s.get('acc', '') in ['admin', 'cashier'] ? s.get('acc', '') : (s.get('role', '') == 'admin' ? 'admin' : '');
+    }
+    function isAdmin() { return isStaff() && role() == 'admin'; }
+    function isCashier() { return isStaff() && role() == 'cashier'; }
+    function settingsPath() { return /databases/$(database)/documents/acc_meta/settings; }
+    function lockDate() { return exists(settingsPath()) ? get(settingsPath()).data.get('lock', '') : ''; }
+
+    match /staff/{email} {
+      allow get: if signedIn() && email == request.auth.token.email.lower();
+      allow list, create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // السندات: إنشاء فقط، ولا تعديل إلا إلغاء من المشرف، ولا حذف، ولا شيء في فترة مقفلة
+    match /acc_v/{id} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && request.resource.data.id == id
+        && request.resource.data.d is string
+        && request.resource.data.d > lockDate()
+        && request.resource.data.get('st', 'ok') == 'ok'
+        && (isAdmin() || request.resource.data.t in ['sale', 'sret', 'pur', 'rcpt']);
+      allow update: if isAdmin()
+        && resource.data.get('st', 'ok') == 'ok'
+        && request.resource.data.st == 'void'
+        && resource.data.d > lockDate()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['st', 'vd', 'u_']);
+      allow delete: if false;
+    }
+
+    match /acc_meta/{id} {
+      allow read: if isStaff();
+      // رقم الجهاز لأي مستخدم
+      allow create, update: if isStaff() && id.matches('dev_.*');
+      // الإعدادات (ومنها تاريخ القفل) للمشرف فقط
+      allow create, update: if isAdmin() && id == 'settings';
+      // لقطات الإقفال وسجل القفل: إنشاء فقط، ولا حذف
+      allow create: if isAdmin() && (id.matches('close_.*') || id.matches('lock_.*'));
+      // اللقطة لا تتغير إلا بإضافة بيانات إعادة الفتح مرة واحدة
+      allow update: if isAdmin() && id.matches('close_.*')
+        && resource.data.get('reopened', null) == null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reopened', 'u_']);
+      allow delete: if false;
+    }
+
+    match /acc_accounts/{id} {
+      allow read: if isStaff();
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+    // الكاشير يضيف أصنافاً وأسماء، ويربط الباركود ويحدّث سعر البيع من فاتورة الشراء
+    match /acc_items/{id} {
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if false;
+    }
+    match /acc_parties/{id} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /catalog/{id} { allow read: if isStaff(); allow write: if false; }
+    match /count/{id} { allow read: if isStaff(); allow write: if false; }
+  }
+}

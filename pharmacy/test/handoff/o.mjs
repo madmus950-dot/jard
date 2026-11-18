@@ -1,0 +1,11 @@
+import { build, trialBalance, accBalance, A, DEFAULT_ACCOUNTS, check } from './engine.js';
+import fs from 'fs';
+const pkg=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+const items=new Map(pkg.items.map(x=>[x.id,x])), parties=new Map(pkg.parties.map(x=>[x.id,x]));
+const accounts=new Map(DEFAULT_ACCOUNTS.map(a=>[a.id,a]));
+const v={id:'o1',t:'open',d:pkg.asof,m:'x',ln:pkg.stock.map(x=>({i:x.i,n:x.i,u:0,z:1,q:x.q,c:x.c,s:x.s||1,...(x.x?{x:x.x}:{})})),pb:pkg.parties.map(p=>({pt:p.id,b:p.b})),cb:pkg.cash.map(c=>({ca:c.ca,b:c.b}))};
+console.log('check:',check(v,{items,parties,accounts}));
+const L=build({items,parties,accounts,vouchers:[v]});
+console.log('dr/cr',L.dr,L.cr,'issues',L.issues.map(i=>i.k));
+for(const r of trialBalance(L,accounts,'',pkg.asof).rows) console.log(r.a.id,r.a.n,r.close);
+for(const [id,s] of L.itm) console.log(id,s.Q,JSON.stringify(s.st));

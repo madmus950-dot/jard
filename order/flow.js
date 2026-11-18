@@ -25,7 +25,7 @@ const keepLines = a => a ? a.lines.slice(0, 40).map(l => ({ t: l.t, h: Math.roun
 
 /* ---------- واجهة الكاميرا ---------- */
 function shell(onClose) {
-  const video = h('video', { class: 'cv', playsinline: true, muted: true, autoplay: true });
+  const video = h('video', { class: 'cv', playsinline: true, muted: true, autoplay: true, poster: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' });
   const frame = h('div', { class: 'cframe' }, h('i', { class: 'c1' }), h('i', { class: 'c2' }), h('i', { class: 'c3' }), h('i', { class: 'c4' }), h('b', { class: 'scanline' }));
   const steps = h('ol', { class: 'steps' }, h('li', { 'data-s': 'front' }, 'الواجهة'), h('li', { 'data-s': 'exp' }, 'الصلاحية'), h('li', { 'data-s': 'qty' }, 'الكمية والسعر'));
   const torchB = h('button', { class: 'cbtn hide', type: 'button', 'aria-label': 'الإضاءة' }, icon('bolt'));
@@ -110,7 +110,12 @@ export async function openCamera(order, hooks, opt = {}) {
   history.pushState({ cam: 1 }, '');
   const onPop = () => { if (history.state && history.state.cam) return; close(true); };
   addEventListener('popstate', onPop);
-  const onVis = () => { if (document.hidden) close(); };
+  // التطبيق في الخلفية (اختيار صورة من الاستديو، نافذة إذن، مكالمة): نوقف الكاميرا مؤقتاً ونعيد تشغيلها عند الرجوع
+  const onVis = () => {
+    if (closed) return;
+    if (document.hidden) { if (cam && !starting) { clearTimeout(liveT); if (stopDec) { stopDec(); stopDec = null; } cam.stop(); cam = null; } }
+    else if (!cam && !starting) setTimeout(() => { if (!closed && !document.hidden) startCam(); }, 250);
+  };
   document.addEventListener('visibilitychange', onVis);
 
   // الحالة الحالية للصنف الذي يُصوَّر
@@ -144,7 +149,7 @@ export async function openCamera(order, hooks, opt = {}) {
     UI.hint.textContent = s === 'front' ? (opt.reid ? 'صوّر جانباً آخر من العلبة يظهر فيه الاسم بوضوح' : 'وجّه الكاميرا إلى واجهة العلبة: الاسم والتركيز داخل الإطار. الباركود يُقرأ وحده')
       : s === 'exp' ? 'قرّب الكاميرا من تاريخ الانتهاء حتى يملأ الشريط' : '';
     UI.manual.lastChild.textContent = s === 'front' ? 'بحث يدوي' : 'اكتب التاريخ';
-    UI.live.hidden = true;
+    if (cam) UI.live.hidden = true;
     hidePanel();
     setCount();
     if (s === 'exp') liveExp();
@@ -159,27 +164,36 @@ export async function openCamera(order, hooks, opt = {}) {
   function working(on, text) { busy = on; UI.shutter.classList.toggle('busy', on); if (text) UI.hint.textContent = text; }
 
   /* ----- الكاميرا والباركود ----- */
-  try { cam = await CAM.startCamera(UI.video); }
-  catch (e) {
-    toast(e && e.name === 'NotAllowedError' ? 'اسمح للتطبيق باستخدام الكاميرا من إعدادات الجوال' : 'تعذّر تشغيل الكاميرا. يمكنك الاختيار من الصور.', { bad: true });
-  }
-  if (closed) { if (cam) cam.stop(); return; }
-  if (cam && cam.hasTorch) { UI.torchB.classList.remove('hide'); UI.torchB.onclick = () => UI.torchB.classList.toggle('on', cam.torch()); }
-  if (cam && cam.zoomRange && cam.zoomRange[1] > 1.4) {
-    UI.zoomB.classList.remove('hide');
-    const zs = [cam.zoomRange[0], Math.min(2, cam.zoomRange[1]), cam.zoomRange[1]].filter((v, i, a) => a.indexOf(v) === i);
-    let zi = 0; UI.zoomB.onclick = () => { zi = (zi + 1) % zs.length; cam.zoom(zs[zi]); UI.zoomB.textContent = (Math.round(zs[zi] * 10) / 10) + '×'; };
-  }
-  let lastCode = '', lastT = 0;
-  if (cam) {
-    try {
-      stopDec = await CAM.decodeLoop(UI.video, cam.stream, text => {
-        const now = Date.now();
-        if (text === lastCode && now - lastT < 2500) { lastT = now; return; }
-        lastCode = text; lastT = now;
-        onCode(text);
-      });
-    } catch (e) {}
+  let lastCode = '', lastT = 0, starting = false;
+  async function startCam() {
+    if (starting || cam || closed) return;
+    starting = true;
+    UI.live.hidden = false; UI.live.textContent = 'جارٍ تشغيل الكاميرا…';
+    try { cam = await CAM.startCamera(UI.video, t => { UI.live.textContent = t; }); }
+    catch (e) {
+      starting = false;
+      const msg = e && e.name === 'NotAllowedError' ? 'الكاميرا غير مسموحة: اسمح لتطبيق «تصوير الطلبيات» باستخدام الكاميرا من إعدادات الجوال، ثم اضغط زر التصوير.'
+        : e && e.name === 'NotFoundError' ? 'لم يُعثر على كاميرا في هذا الجهاز. اختر الصور من الاستديو.'
+        : 'لم تعمل الكاميرا (' + ((e && (e.name || e.message)) || 'خطأ') + '). اضغط زر التصوير لإعادة المحاولة، أو اختر من الصور.';
+      UI.live.hidden = false; UI.live.textContent = msg;
+      return;
+    }
+    starting = false;
+    if (closed) { cam.stop(); return; }
+    UI.live.hidden = true;
+    if (cam.hasTorch) { UI.torchB.classList.remove('hide'); UI.torchB.onclick = () => UI.torchB.classList.toggle('on', cam.torch()); }
+    if (cam.zoomRange && cam.zoomRange[1] > 1.4) {
+      UI.zoomB.classList.remove('hide');
+      const zs = [cam.zoomRange[0], Math.min(2, cam.zoomRange[1]), cam.zoomRange[1]].filter((v, i, a) => a.indexOf(v) === i);
+      let zi = 0; UI.zoomB.onclick = () => { zi = (zi + 1) % zs.length; cam.zoom(zs[zi]); UI.zoomB.textContent = (Math.round(zs[zi] * 10) / 10) + '×'; };
+    }
+    if (step === 'exp') liveExp();
+    CAM.decodeLoop(UI.video, cam.stream, text => {
+      const now = Date.now();
+      if (text === lastCode && now - lastT < 2500) { lastT = now; return; }
+      lastCode = text; lastT = now;
+      onCode(text);
+    }).then(f => { if (closed) f(); else stopDec = f; }).catch(() => {});
   }
 
   function onCode(text) {
@@ -496,7 +510,7 @@ export async function openCamera(order, hooks, opt = {}) {
   }
 
   /* ----- الأزرار ----- */
-  UI.shutter.onclick = () => { if (panelOn) return; if (step === 'front') captureFront(); else if (step === 'exp') captureExp(); };
+  UI.shutter.onclick = () => { if (panelOn) return; if (!cam) { startCam(); return; } if (step === 'front') captureFront(); else if (step === 'exp') captureExp(); };
   UI.gallery.onclick = () => {
     const inp = h('input', { type: 'file', accept: 'image/*', style: { display: 'none' } });
     inp.onchange = async () => {
@@ -508,7 +522,7 @@ export async function openCamera(order, hooks, opt = {}) {
   UI.manual.onclick = () => { if (step === 'exp') showExp({ exp: '', all: [] }, 'كتابة يدوية'); else manualPick(''); };
 
   if (opt.expOnly) setStep('exp'); else setStep('front');
-  if (!cam) UI.hint.textContent = 'الكاميرا غير متاحة: اختر صورة من الاستديو أو ابحث يدوياً.';
+  startCam();
 }
 
 /** نافذة البحث في قاعدة الأصناف */

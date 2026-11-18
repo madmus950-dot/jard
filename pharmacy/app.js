@@ -8,8 +8,10 @@ import { partiesView, partyView, partyEdit } from './v_parties.js';
 import { itemsView, itemView, itemEdit } from './v_items.js';
 import { reportsView, reportView } from './v_reports.js';
 import { moreView, vouchersView, voucherView, settingsView, importView } from './v_more.js';
+import { closeView } from './v_close.js';
 
 const cfg = window.JARD_CONFIG || {};
+if (cfg.env) { try { const b = document.createElement('div'); b.textContent = 'نسخة اختبار (' + ((cfg.firebase || {}).projectId || '') + ') بيانات تجريبية فقط'; b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b42318;color:#fff;text-align:center;font:600 12px sans-serif;padding:2px;pointer-events:none'; document.body.appendChild(b); } catch (e) {} }
 const params = new URLSearchParams(location.search);
 const app = $('#app');
 let be = null, store = null, ctx = null, cur = null, unsubStore = null;
@@ -107,6 +109,7 @@ const ROUTES = [
   [/^vouchers$/, () => vouchersView(ctx)],
   [/^vch\/([^/]+)$/, m => voucherView(ctx, decodeURIComponent(m[1]))],
   [/^settings$/, () => settingsView(ctx), { narrow: true }],
+  [/^close$/, () => closeView(ctx), { narrow: true }],
   [/^import$/, () => importView(ctx), { narrow: true }]
 ];
 function route() {
