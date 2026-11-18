@@ -2,6 +2,15 @@ package com.madmus950.jard;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.hardware.usb.UsbConstants;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbDeviceConnection;
+import android.hardware.usb.UsbEndpoint;
+import android.hardware.usb.UsbInterface;
+import android.hardware.usb.UsbManager;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -21,6 +30,7 @@ import android.provider.MediaStore;
 import android.util.Base64;
 import android.view.Gravity;
 import android.webkit.JavascriptInterface;
+import org.json.JSONObject;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -317,11 +327,116 @@ public class MainActivity extends Activity {
         });
     }
 
+    /* ---------- طابعة الملصقات (Zebra) عبر USB/OTG: إرسال أوامر ZPL كما هي ---------- */
+    static final String USB_PERM = "com.madmus950.jard.USB_PERMISSION";
+    static final int ZEBRA = 0x0A5F;
+
+    UsbDevice findPrinter(UsbManager um) {
+        UsbDevice best = null;
+        for (UsbDevice d : um.getDeviceList().values()) {
+            if (d.getVendorId() == ZEBRA) return d;
+            for (int i = 0; i < d.getInterfaceCount(); i++) {
+                if (d.getInterface(i).getInterfaceClass() == UsbConstants.USB_CLASS_PRINTER && best == null) best = d;
+            }
+        }
+        return best;
+    }
+
+    void usbDone(final String id, final boolean ok, final String m) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (web == null) return;
+                String js = "window.__usbDone&&window.__usbDone(" + JSONObject.quote(id) + "," + ok + "," + JSONObject.quote(m == null ? "" : m) + ")";
+                web.evaluateJavascript(js, null);
+            }
+        });
+    }
+
+    void usbWrite(final UsbManager um, final UsbDevice dev, final String id, final byte[] data) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                UsbDeviceConnection c = null;
+                UsbInterface intf = null;
+                try {
+                    UsbEndpoint out = null;
+                    for (int i = 0; i < dev.getInterfaceCount() && out == null; i++) {
+                        UsbInterface f = dev.getInterface(i);
+                        for (int k = 0; k < f.getEndpointCount(); k++) {
+                            UsbEndpoint e = f.getEndpoint(k);
+                            if (e.getType() == UsbConstants.USB_ENDPOINT_XFER_BULK && e.getDirection() == UsbConstants.USB_DIR_OUT) { out = e; intf = f; break; }
+                        }
+                    }
+                    if (out == null) { usbDone(id, false, "لم أجد منفذ الطباعة في الجهاز الموصول"); return; }
+                    c = um.openDevice(dev);
+                    if (c == null) { usbDone(id, false, "تعذّر فتح الطابعة. افصل الكابل وأعد توصيله"); return; }
+                    if (!c.claimInterface(intf, true)) { usbDone(id, false, "الطابعة مشغولة. أعد توصيل الكابل"); return; }
+                    int off = 0;
+                    byte[] buf = new byte[16384];
+                    while (off < data.length) {
+                        int n = Math.min(buf.length, data.length - off);
+                        System.arraycopy(data, off, buf, 0, n);
+                        int w = c.bulkTransfer(out, buf, n, 15000);
+                        if (w <= 0) { usbDone(id, false, "انقطع الإرسال. تأكد أن الطابعة مشغّلة وفيها ملصقات"); return; }
+                        off += w;
+                    }
+                    usbDone(id, true, "");
+                } catch (Throwable t) {
+                    usbDone(id, false, "خطأ في الطباعة: " + t.getMessage());
+                } finally {
+                    try { if (c != null && intf != null) c.releaseInterface(intf); } catch (Throwable t) { /* ignore */ }
+                    try { if (c != null) c.close(); } catch (Throwable t) { /* ignore */ }
+                }
+            }
+        }).start();
+    }
+
+    void usbPrint(final String id, final byte[] data) {
+        final UsbManager um = (UsbManager) getSystemService(Context.USB_SERVICE);
+        if (um == null) { usbDone(id, false, "هذا الجوال لا يدعم توصيل طابعة USB"); return; }
+        final UsbDevice dev = findPrinter(um);
+        if (dev == null) { usbDone(id, false, "الطابعة غير موصولة. وصّلها بكابل OTG وتأكد أنها مشغّلة، ثم أعد المحاولة"); return; }
+        if (um.hasPermission(dev)) { usbWrite(um, dev, id, data); return; }
+        final BroadcastReceiver r = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context ctx, Intent in) {
+                try { unregisterReceiver(this); } catch (Throwable t) { /* ignore */ }
+                if (in.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) || um.hasPermission(dev)) usbWrite(um, dev, id, data);
+                else usbDone(id, false, "لم يُسمح للتطبيق باستخدام الطابعة. أعد المحاولة واضغط «سماح»");
+            }
+        };
+        IntentFilter f = new IntentFilter(USB_PERM);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(r, f);
+        Intent i = new Intent(USB_PERM).setPackage(getPackageName());
+        int flags = Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0;
+        um.requestPermission(dev, PendingIntent.getBroadcast(this, 7, i, flags));
+    }
+
     /** ما تستدعيه الواجهة من داخل التطبيق: window.JardApp */
     class Bridge {
         @JavascriptInterface
         public String version() {
             return MainActivity.this.version();
+        }
+
+        /** يرسل أوامر الطابعة (base64) إلى طابعة USB، والنتيجة إلى window.__usbDone(id, ok, msg) */
+        @JavascriptInterface
+        public void usbPrint(final String id, String b64) {
+            final byte[] data;
+            try {
+                data = Base64.decode(b64, Base64.DEFAULT);
+            } catch (Throwable t) {
+                usbDone(id, false, "بيانات الملصق غير صالحة");
+                return;
+            }
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    MainActivity.this.usbPrint(id, data);
+                }
+            });
         }
 
         @JavascriptInterface

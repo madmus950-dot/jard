@@ -34,7 +34,13 @@ export function itemIndex(store) {
   return IX;
 }
 function unitByBarcode(it, b) { const k = (it.u || []).findIndex(u => u.b === b); return k >= 0 ? k : 0; }
-export function findBarcode(store, code) { const x = itemIndex(store).byBc.get(String(code).trim()); return x ? { it: store.items.get(x.id), u: x.u } : null; }
+export function findBarcode(store, code) {
+  const k = String(code).trim(), x = itemIndex(store).byBc.get(k);
+  if (x) return { it: store.items.get(x.id), u: x.u };
+  // ملصق مطبوع من تطبيق الجرد للأصناف بلا باركود: الباركود فيه هو رقم الصنف نفسه (مثل 05-5833)
+  const it = k && !/^\d{8,}$/.test(k) ? store.items.get(k) : null;
+  return it && it.act !== false ? { it, u: 0 } : null;
+}
 
 /**
  * يقرأ أي رمز: باركود خطي، أو مربع (QR/DataMatrix)، أو رمز GS1 الدوائي (01)رقم الصنف(17)الانتهاء(10)التشغيلة.

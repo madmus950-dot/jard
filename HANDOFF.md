@@ -84,6 +84,7 @@ HANDOFF.md                     هذا الملف
 - واجهة ويب في الجذر، تعمل داخل الـ APK وعلى GitHub Pages (`madmus950-dot.github.io/jard`، لكنها لا تفتح في اليمن بدون VPN — لذلك صار APK).
 - دخول الموظفين، تحميل `catalog`، إدخال سطور جرد إلى `count` (مخزن 1 صيدلية / 2 مخزن، كمية، صلاحية، صنف جديد)، مراجعة واعتماد من المشرف.
 - **v1.0.12**: قراءة كل أنواع الرموز (EAN/UPC/Code128/39/93/ITF/Codabar/RSS-14/QR/DataMatrix/PDF417/Aztec)، **رمز GS1 الدوائي** (01 GTIN، 17 الصلاحية → MM/20YY، 10 التشغيلة)، **كاميرا مدمجة مستمرة** (`#camHost`)، وعند باركود غير معروف: **«ربط الباركود بصنف»** (`#linkBox`). الروابط محفوظة محلياً `localStorage['jard.links']` وتُصدَّر مع قاعدة الجرد (`linkedCodes`)، والسطر يحمل `lb`.
+- **تبويب «باركود» (طباعة ملصقات)**: الأصناف بلا باركود (ما جُرد في المخزن المختار، أو كل القاعدة)، عدد الملصقات = الكمية المجرودة. الباركود Code 128 = **رقم الصنف** (`lookup()` يبحث بـ `byId` فيُقرأ فوراً؛ والصنف الجديد بمعرّفه `N-XXXXX`). الملصق يُرسم canvas بالنقاط (8 نقاط/مم) ثم ZPL `^GFA` + `^PQ`، إعدادات `localStorage['jard.lbl']` (40×25 مم افتراضياً، إزاحة، شريط/حراري، غمق)، ملصق تجربة، معايرة `~JC`، حفظ ملف `.zpl`. الإرسال: `JardApp.usbPrint(id,b64)` ← `window.__usbDone(id,ok,msg)` (UsbManager، Zebra 0x0A5F أو فئة الطابعات 7، bulk OUT، إذن USB بـ PendingIntent)، أو WebUSB في Chrome. الحسابات: `findBarcode` يقبل رقم الصنف إن لم يطابق باركوداً.
 - الأدوات: `parseCode` (GS1)، ZXing `vendor/zxing.min.js` (`@zxing/library@0.21.3`) + `BarcodeDetector` إن وُجد.
 
 ---
