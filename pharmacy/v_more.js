@@ -3,7 +3,8 @@ import { h, icon, toast, field, numField, seg, confirmBox, sheet, put, wide } fr
 import { money, price, qty, norm, dmy, today, num, r2, newId, parseExp } from './util.js';
 import { totals, check, TYPES, STORES, PARTY_TYPES, describe } from './engine.js';
 import { typeName, voucherLine, partyName, units, printVoucher, cashAccounts, exportVoucher } from './common.js';
-import { shareText, printHtml } from './out.js';
+import { shareText, printHtml, saveBlob } from './out.js';
+import { COLS } from './store.js';
 
 export function moreView(ctx) {
   const it = (k, label, sub, ic, href) => ctx.can(k) ? h('a', { class: 'ln link', href: '#/' + href }, h('span', { class: 'k', style: { display: 'flex', gap: '12px', alignItems: 'center' } }, icon(ic, 22), h('span', null, h('b', null, label), sub ? h('small', null, sub) : null)), icon('fwd', 18)) : null;
@@ -32,12 +33,29 @@ export function moreView(ctx) {
         it('settings', 'الإعدادات', 'اسم الصيدلية، الصناديق، المصروفات، المستخدمون', 'gear', 'settings'),
         it('settings', 'الإقفال والتدقيق', 'إقفال الشهر أو السنة، فحص سلامة الدفاتر، سجل الفتح والإقفال', 'doc', 'close'),
         it('import', 'الأرصدة الافتتاحية', 'استيراد الأصناف والأسماء والأرصدة', 'in', 'import'),
+        ctx.can('import') ? h('button', { type: 'button', class: 'ln link', style: { width: '100%', border: '0', background: 'none', textAlign: 'start', font: 'inherit', color: 'inherit', cursor: 'pointer' }, on: { click: () => backupAll(ctx) } },
+          h('span', { class: 'k', style: { display: 'flex', gap: '12px', alignItems: 'center' } }, icon('doc', 22), h('span', null, h('b', null, 'نسخة احتياطية كاملة'), h('small', null, 'ملف واحد فيه كل الأصناف والأسماء والسندات والإعدادات'))), icon('fwd', 18)) : null,
         h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, ctx.user.name), h('small', null, (ctx.user.role === 'admin' ? 'مشرف' : 'كاشير') + '، ', h('bdi', null, ctx.user.email))),
           h('button', { class: 'btn ghost sm', on: { click: async () => { if (ctx.store.status.pending && !(await confirmBox('سندات لم تُرفع', ctx.store.status.pending + ' سند لم يصل الخادم بعد. إن خرجت الآن تبقى على هذا الجهاز وتُرفع عند دخولك ثانية. اخرج؟', 'خروج'))) return; ctx.logout(); } } }, 'خروج'))),
       h('p', { class: 'muted', style: { fontSize: '12.5px', textAlign: 'center', margin: '18px 0 2px' } }, 'نظام إدارة الصيدليات، تطوير وبرمجة MOSMAD'),
       h('p', { class: 'muted', style: { fontSize: '12.5px', textAlign: 'center', marginTop: '0' } },
         (S.name || 'الصيدلية') + '، الحسابات محسوبة من ' + ctx.store.vouchers.size + ' سنداً في ' + (ctx.store.L.ms || 0) + ' ملّي ثانية' + (window.JardApp && window.JardApp.version ? '، نسخة ' + window.JardApp.version() : '')))
   };
+}
+
+/* ---------- نسخة احتياطية كاملة (للمشرف) ---------- */
+async function backupAll(ctx) {
+  const st = ctx.store;
+  if (st.status.pending && !(await confirmBox('سندات لم تُرفع', st.status.pending + ' سند على هذا الجهاز لم يصل الخادم بعد، وهي داخلة في النسخة. أكمل؟', 'أكمل'))) return;
+  const data = {};
+  for (const c of COLS) data[c] = Object.fromEntries([...(st.data[c] || new Map()).entries()].map(([k, v]) => [k, v && v.data !== undefined && v.u !== undefined ? v.data : v]));
+  const now = new Date(), stamp = now.toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/^(\d{8})(\d{4})$/, '$1_$2');
+  const cfg = (window.JARD_CONFIG || {}).firebase || {};
+  const pkg = { kind: 'pharm-backup', v: 1, at: now.toISOString(), project: cfg.projectId || '', by: ctx.user.email, counts: Object.fromEntries(COLS.map(c => [c, Object.keys(data[c]).length])), data };
+  try {
+    const r = await saveBlob('نسخة_الحسابات_' + stamp + '.json', new Blob([JSON.stringify(pkg)], { type: 'application/json' }));
+    if (r !== 'cancel') toast('حُفظت النسخة: ' + pkg.counts.v + ' سند، ' + pkg.counts.items + ' صنف، ' + pkg.counts.parties + ' اسم');
+  } catch (e) { toast('تعذّر حفظ النسخة: ' + e.message, { bad: true }); }
 }
 
 /* ---------- كل السندات ---------- */
@@ -242,20 +260,23 @@ export function validateOpening(pkg, store) {
   return { err: fmt(G, ''), warn: fmt(W, '') };
 }
 
+const IMP = { pkg: null, D: null };
 export function importView(ctx) {
   const { store, be } = ctx;
   if (!ctx.can('import')) return { title: 'الأرصدة الافتتاحية', el: h('div', { class: 'note bad' }, 'للمشرف فقط.') };
   const out = h('div');
-  let pkg = null;
+  // يبقى الملف المختار إن أعيد رسم الصفحة (تدوير الشاشة أو تغيير حجم النافذة)
+  let pkg = IMP.pkg;
   const file = h('input', { type: 'file', accept: '.json,application/json', style: { display: 'none' }, on: { change: async e => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
-    try { pkg = JSON.parse(await f.text()); if (pkg.kind !== 'pharm-opening') throw new Error('kind'); }
-    catch (x) { pkg = null; out.textContent = ''; put(out, h('div', { class: 'note bad' }, 'الملف ليس ملف أرصدة افتتاحية صحيحاً (' + f.name + ').')); return; }
-    if (/^\d{4}-\d{2}-\d{2}$/.test(pkg.asof || '')) D.d = pkg.asof;
+    try { pkg = JSON.parse(await f.text()); if (pkg.kind !== 'pharm-opening') throw new Error('kind'); IMP.pkg = pkg; IMP.D = null; }
+    catch (x) { pkg = null; IMP.pkg = null; out.textContent = ''; put(out, h('div', { class: 'note bad' }, 'الملف ليس ملف أرصدة افتتاحية صحيحاً (' + f.name + ').')); return; }
+    IMP.D = Object.assign(D, { d: /^\d{4}-\d{2}-\d{2}$/.test(pkg.asof || '') ? pkg.asof : today(), stock: true, parties: true, cash: true });
     drawPkg();
   } } });
-  const D = { d: today(), stock: true, parties: true, cash: true };
+  const D = IMP.D || (IMP.D = { d: today(), stock: true, parties: true, cash: true });
   let creating = false;
+  const isStore2 = () => !!pkg && (pkg.part === 'store2' || (pkg.stock.length > 0 && pkg.stock.every(x => +x.s === 2) && !pkg.parties.some(p => Math.abs(p.b || 0) > 0.004) && !(pkg.cash || []).some(c => +c.b)));
   function drawPkg() {
     out.textContent = '';
     const nC = pkg.parties.filter(p => p.t === 'c').length, nS = pkg.parties.filter(p => p.t === 's').length;
@@ -293,11 +314,12 @@ export function importView(ctx) {
         } catch (x) { status.textContent = x.code === 'permission-denied' ? 'Firebase رفض الكتابة: انشر قواعد Firestore الجديدة أولاً ثم أعد المحاولة.' : 'تعذّر: ' + (x.code || x.message); }
         e.target.disabled = false;
       } } }, 'رفع الأصناف والأسماء'), status,
+      isStore2() ? h('div', { class: 'note' }, h('b', null, 'حزمة مخزون المخزن فقط. '), 'تُضاف قيداً تكميلياً بعد القيد الافتتاحي الأساسي، بنفس تاريخه، مرة واحدة.') : null,
       h('h3', { class: 'sect' }, '2. القيد الافتتاحي'),
       h('p', { class: 'muted', style: { margin: '0 4px 8px', fontSize: '14px' } }, 'سند واحد بتاريخ بداية السنة: المخزون والأرصدة والنقدية، ورأس المال = الأصول − الالتزامات. يمكنك إلغاؤه وإعادته إن تغيرت الأرقام.'),
       field('تاريخ القيد', h('input', { type: 'date', value: D.d, on: { change: e => { D.d = e.target.value; } } })),
       chk('المخزون', 'stock'), chk('أرصدة العملاء والموردين', 'parties'), chk('النقدية', 'cash'),
-      h('button', { class: 'btn wide', disabled: V.err.length > 0, on: { click: makeOpening } }, 'إنشاء القيد الافتتاحي'));
+      h('button', { class: 'btn wide', disabled: V.err.length > 0, on: { click: makeOpening } }, isStore2() ? 'إضافة مخزون المخزن' : 'إنشاء القيد الافتتاحي'));
   }
   const lnx = (k, v, cls) => h('div', { class: 'ln' }, h('span', { class: 'k' }, h('b', null, k)), h('span', { class: 'v num ' + (cls || ''), style: { fontSize: '16px' } }, String(v)));
   const chk = (label, k) => h('label', { class: 'field', style: { display: 'flex', gap: '10px', alignItems: 'center' } }, h('input', { type: 'checkbox', checked: D[k], style: { width: '22px', minHeight: '22px' }, on: { change: e => { D[k] = e.target.checked; } } }), label);
@@ -307,23 +329,36 @@ export function importView(ctx) {
     if (V.err.length) { toast('أصلح أخطاء الملف أولاً', { bad: true }); return; }
     if (store.status.pending) { toast('انتظر اكتمال رفع السندات (' + store.status.pending + ') ثم أعد المحاولة', { bad: true }); return; }
     const had = [...store.vouchers.values()].filter(x => x.t === 'open' && x.st !== 'void');
-    if (had.length) { toast('يوجد قيد افتتاحي فعّال. ألغِه من سجل السندات (بسبب مسجّل) قبل إنشاء بديل، منعاً للتكرار.', { bad: true }); return; }
+    if (had.length && !isStore2()) { toast('يوجد قيد افتتاحي فعّال. ألغِه من سجل السندات (بسبب مسجّل) قبل إنشاء بديل، منعاً للتكرار.', { bad: true }); return; }
+    if (isStore2()) {
+      // مخزون المخزن يُجرد بعد الافتتاح: يُضاف قيداً تكميلياً مرة واحدة، بنفس تاريخ القيد الافتتاحي وبعده مباشرة
+      if (!had.length) { toast('أنشئ القيد الافتتاحي الأساسي أولاً، ثم أضف مخزون المخزن.', { bad: true }); return; }
+      if (had.some(o => (o.ln || []).some(l => +l.s === 2))) { toast('مخزون المخزن موجود في قيد افتتاحي سابق، فلا يُضاف مرتين.', { bad: true }); return; }
+      const base = had.slice().sort((a, b) => (a.at || 0) - (b.at || 0))[0];
+      if (!(await confirmBox('إضافة مخزون المخزن', pkg.stock.length + ' سطراً بقيمة ' + money(r2(pkg.stock.reduce((t, x) => t + x.q * x.c, 0))) + '، بتاريخ القيد الافتتاحي ' + dmy(base.d) + '. يُضاف مرة واحدة ويرفع رأس المال بقيمته.', 'إضافة'))) return;
+      creating = true; try { await makeOpening2(base); } finally { creating = false; }
+      return;
+    }
     if (pkg.asof && D.d !== pkg.asof && !(await confirmBox('تاريخ القيد يخالف تاريخ الملف', 'الملف بتاريخ ' + dmy(pkg.asof) + ' وتاريخ القيد المختار ' + dmy(D.d) + '. الأرصدة تُنسب للتاريخ الذي تختاره. أكمل؟', 'متابعة', true))) return;
     creating = true; try { await makeOpening2(); } finally { creating = false; }
   }
-  async function makeOpening2() {
+  async function makeOpening2(base) {
     const missingI = pkg.stock.filter(x => !store.items.has(x.i)).length, missingP = pkg.parties.filter(p => p.b && !store.parties.has(p.id)).length;
-    if ((D.stock && missingI) || (D.parties && missingP)) { toast('ارفع الأصناف والأسماء أولاً (الخطوة 1) وانتظر اكتمالها.', { bad: true }); return; }
-    const v = { t: 'open', d: D.d, m: 'أرصدة افتتاحية من ' + (pkg.src || 'الملف') + ' بتاريخ ' + (pkg.asof || ''), ln: [], pb: [], cb: [] };
+    if ((D.stock && missingI) || (D.parties && missingP && !base)) { toast('ارفع الأصناف والأسماء أولاً (الخطوة 1) وانتظر اكتمالها.', { bad: true }); return; }
+    const v = base
+      ? { t: 'open', d: base.d, at: (base.at || Date.now()) + 1, m: 'مخزون المخزن الافتتاحي (قيد تكميلي) من جرد ' + (pkg.asof || ''), ln: [], pb: [], cb: [] }
+      : { t: 'open', d: D.d, m: 'أرصدة افتتاحية من ' + (pkg.src || 'الملف') + ' بتاريخ ' + (pkg.asof || ''), ln: [], pb: [], cb: [] };
+    if (base) { D.stock = true; D.parties = false; D.cash = false; }
     if (D.stock) v.ln = pkg.stock.filter(x => x.q > 0).map(x => { const it = store.items.get(x.i); return { i: x.i, n: it ? it.n : x.i, u: 0, z: 1, q: x.q, c: x.c, s: x.s || 1, ...(x.x ? { x: x.x } : {}) }; });
     if (D.parties) v.pb = pkg.parties.filter(p => Math.abs(p.b || 0) > 0.004).map(p => ({ pt: p.id, b: p.b }));
     if (D.cash) v.cb = (pkg.cash || []).filter(x => x.b).map(x => ({ ca: store.accounts.has(x.ca) ? x.ca : '1101', b: x.b }));
     const err = check(v, { items: store.items, parties: store.parties, accounts: store.accounts, lock: store.settings.lock });
     if (err) { toast(err, { bad: true }); return; }
     const doc = await store.saveVoucher(v);
-    toast('أُنشئ القيد الافتتاحي');
+    toast(base ? 'أُضيف مخزون المخزن' : 'أُنشئ القيد الافتتاحي');
     ctx.go('vch/' + encodeURIComponent(doc.id));
   }
+  if (pkg) setTimeout(drawPkg, 0);
   return {
     title: 'الأرصدة الافتتاحية',
     el: h('div', null,
