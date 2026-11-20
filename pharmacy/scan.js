@@ -56,6 +56,8 @@ export async function scanCode() {
  * والزر يفتح كاميرا اللابتوب إن وُجدت، وإلا يجهّز الخانة للمسح.
  */
 export function scanButton(onCode, input, opt = {}) {
+  // برنامج الكمبيوتر: لا كاميرا (كاميرا اللابتوب لا تقرأ الباركود). القارئ USB يكتب في خانة البحث مباشرة
+  if (window.JardApp && window.JardApp.desktop) return null;
   const desk = DESK();
   return h('button', { class: 'iconbtn', type: 'button', 'aria-label': desk ? 'قارئ الباركود' : 'مسح بالكاميرا', title: desk ? 'قارئ الباركود: امسح مباشرة، أو اضغط لاستعمال كاميرا الكمبيوتر' : '',
     on: { click: async () => {
