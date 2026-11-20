@@ -25,6 +25,8 @@ export function moreView(ctx) {
         it('adj', 'تسوية مخزون', 'نتيجة جرد، منتهي، تالف', 'box', 'v/adj'),
         it('xfer', 'تحويل بين المخازن', 'من الصيدلية إلى المخزن أو العكس', 'swap', 'v/xfer'),
         it('jv', 'قيد يومية', 'للمحاسب: قيد يدوي متوازن', 'doc', 'v/jv')),
+      !(window.JardApp && window.JardApp.desktop) && ctx.can('sale') ? h('section', { class: 'page tight' },
+        h('a', { class: 'ln link', href: '#/scanpc' }, h('span', { class: 'k', style: { display: 'flex', gap: '12px', alignItems: 'center' } }, icon('camera', 22), h('span', null, h('b', null, 'قارئ للكمبيوتر'), h('small', null, 'امسح بكاميرا الجوال فيُضاف الصنف إلى الفاتورة المفتوحة على الكمبيوتر'))), icon('fwd', 18))) : null,
       h('h3', { class: 'sect' }, 'السجل والتقارير'),
       h('section', { class: 'page tight' },
         h('a', { class: 'ln link', href: '#/vouchers' }, h('span', { class: 'k', style: { display: 'flex', gap: '12px', alignItems: 'center' } }, icon('doc', 22), h('span', null, h('b', null, 'كل السندات'), h('small', null, 'بحث، طباعة، إلغاء'))), icon('fwd', 18)),

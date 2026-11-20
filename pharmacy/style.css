@@ -357,3 +357,10 @@ input.num { text-align: left; }
   .foot { padding: 20px 18px; }
   .foot .tot .big { font-size: 40px; }
 }
+
+/* الجوال قارئاً للكمبيوتر: شارة الحالة بجانب خانة البحث */
+.rscan { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 0 12px; height: 48px; border-radius: var(--r); border: 1.5px dashed var(--rule2); color: var(--ink2); font-size: 13.5px; white-space: nowrap; background: var(--sheet); }
+.rscan.on { border-style: solid; border-color: var(--green); color: var(--green-d); background: var(--green-t); }
+.rscan.on svg { animation: rspulse 1.6s ease-in-out infinite; }
+@keyframes rspulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .rscan.on svg { animation: none; } }

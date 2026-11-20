@@ -4,6 +4,7 @@ import { money, price as fp, qty, num, today, parseExp, dmy, norm } from './util
 import { totals, check, STORES, partyBalance } from './engine.js';
 import { findBarcode, findCode, parseCode, linkBarcode, searchItems, units, stockOf, nearestExp, expTag, qtyText, cashAccounts, partyRows, partyFilter, partyName, avgCost, printVoucher, balWords } from './common.js';
 import { scanButton, inlineScanner } from './scan.js';
+import { setRemoteHandler, remoteBadge } from './remote.js';
 
 const META = {
   sale: { title: 'فاتورة بيع', pt: 'c', who: 'العميل', none: 'زبون نقدي', price: 'p', pay: 'cash', saved: 'حُفظت فاتورة البيع' },
@@ -526,6 +527,7 @@ export function docView(ctx, t) {
   }
 
   drawHead(); drawLines(); drawFoot();
+  setRemoteHandler(code => lookup(code));   // ما يُمسح بالجوال يُضاف لهذه الفاتورة
   /* اختيار المخزن: الصيدلية أو المخزن (يُطبَّق على كل سطور الفاتورة) */
   const storeLbl = { pur: 'إضافة الأصناف إلى', sret: 'إرجاع الأصناف إلى', sale: 'الصرف من', pret: 'الإرجاع من' }[t];
   const storeBox = h('div', { class: 'field', style: { margin: '0 0 10px' } },
@@ -533,7 +535,7 @@ export function docView(ctx, t) {
     anyStore ? seg([[1, STORES[1]], [2, STORES[2]]], D.s, v => { D.s = v; D.ln.forEach(l => { l.s = v; }); change(); })
       : h('div', { class: 'chip set' }, icon('box', 18), STORES[1]));
   const el = h('div', null, head, storeBox,
-    h('div', { class: 'scan' }, input, scanButton(code => lookup(code), input, { inline: toggleCam })),
+    h('div', { class: 'scan' }, input, scanButton(code => lookup(code), input, { inline: toggleCam }) || remoteBadge()),
     camHost,
     isBuy ? h('div', { style: { margin: '0 0 10px' } }, h('button', { type: 'button', class: 'btn ghost sm', on: { click: () => fileIn.click() } }, icon('doc', 18), 'استيراد من ملف'), fileIn) : null,
     t === 'sale' ? h('div', { style: { margin: '0 0 10px' } }, h('button', { type: 'button', class: 'btn ghost sm', on: { click: () => borrow(input.value.trim()) } }, icon('swap', 18), 'صنف من صيدلية أخرى')) : null,

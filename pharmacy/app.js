@@ -9,6 +9,7 @@ import { itemsView, itemView, itemEdit } from './v_items.js';
 import { reportsView, reportView } from './v_reports.js';
 import { moreView, vouchersView, voucherView, settingsView, importView } from './v_more.js';
 import { closeView } from './v_close.js';
+import { startReceiver, scanpcView } from './remote.js';
 
 const cfg = window.JARD_CONFIG || {};
 if (cfg.env) { try { const b = document.createElement('div'); b.textContent = 'نسخة اختبار (' + ((cfg.firebase || {}).projectId || '') + ') بيانات تجريبية فقط'; b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b42318;color:#fff;text-align:center;font:600 12px sans-serif;padding:2px;pointer-events:none'; document.body.appendChild(b); } catch (e) {} }
@@ -181,6 +182,7 @@ async function start(u, offline) {
     logout: async () => { try { await be.signOut(); } catch (e) {} location.hash = ''; location.reload(); }
   };
   unsubStore = store.on(() => { syncChip(); if (cur && cur.v && cur.v.live) draw(true); });
+  startReceiver(ctx);   // الكمبيوتر: يستقبل ما يُمسح بالجوال بنفس الحساب
   addEventListener('hashchange', route);
   route();
   if (offline) {
@@ -209,7 +211,8 @@ const ROUTES = [
   [/^vch\/([^/]+)$/, m => voucherView(ctx, decodeURIComponent(m[1]))],
   [/^settings$/, () => settingsView(ctx), { narrow: true }],
   [/^close$/, () => closeView(ctx), { narrow: true }],
-  [/^import$/, () => importView(ctx), { narrow: true }]
+  [/^import$/, () => importView(ctx), { narrow: true }],
+  [/^scanpc$/, () => scanpcView(ctx), { narrow: true }]
 ];
 function route() {
   const path = location.hash.replace(/^#\/?/, '');

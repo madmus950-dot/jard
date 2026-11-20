@@ -4,6 +4,7 @@ import { money, num, today, parseExp, norm } from './util.js';
 import { check, totals, partyBalance, CTRL, PARTY_TYPES, ADJ_REASONS, STORES } from './engine.js';
 import { cashAccounts, partyRows, partyFilter, partyName, balWords, printVoucher, searchItems, findBarcode, findCode, linkBarcode, units, stockOf, qtyText } from './common.js';
 import { scanButton } from './scan.js';
+import { setRemoteHandler, remoteBadge } from './remote.js';
 
 const TITLES = { rcpt: 'سند قبض', pay: 'سند صرف', exp: 'مصروف', cxf: 'تحويل بين الصناديق', jv: 'قيد يومية', adj: 'تسوية مخزون', xfer: 'تحويل بين المخازن' };
 
@@ -176,6 +177,7 @@ function stockView(ctx, kind) {
     const L = await linkBarcode(ctx, c); if (L) { add(L.it, L.u, L.exp); return L.it.n; }
     return false;
   }
+  setRemoteHandler(c => byCode(c));   // ما يُمسح بالجوال يُضاف لهذا السند
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const v = input.value.trim(); if (!v) return; if (findCode(store, v)) { byCode(v); return; } const r = searchItems(store, v, 1); if (r[0]) add(r[0], 0); else if (/^\S{5,}$/.test(v) && /\d/.test(v)) byCode(v); } });
   function drawLines() {
     lines.textContent = '';
@@ -210,7 +212,7 @@ function stockView(ctx, kind) {
       ? field('السبب', seg(Object.entries(ADJ_REASONS).filter(([k]) => k !== 'found'), S.r, v => { S.r = v; }))
       : h('div', { class: 'row2' }, field('من', seg([[1, STORES[1]], [2, STORES[2]]], S.s, v => { S.s = v; S.s2 = v === 1 ? 2 : 1; toLbl.textContent = STORES[S.s2]; drawLines(); })), h('div', { class: 'field' }, h('span', { class: 'flabel' }, 'إلى'), toLbl)),
     kind === 'adj' ? field('المخزن', seg([[1, STORES[1]], [2, STORES[2]]], S.s, v => { S.s = v; S.ln.forEach(l => { l.s = v; }); drawLines(); })) : null,
-    h('div', { class: 'scan' }, input, scanButton(c => byCode(c), input)),
+    h('div', { class: 'scan' }, input, scanButton(c => byCode(c), input) || remoteBadge()),
     sugg, lines,
     h('div', { class: 'row2' },
       field('التاريخ', h('input', { type: 'date', value: S.d, on: { change: e => { S.d = e.target.value || today(); } } })),
