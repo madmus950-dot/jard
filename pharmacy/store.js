@@ -58,6 +58,8 @@ export class Store {
   }
 
   listen() {
+    for (const t of Object.values(this.retry || {})) clearTimeout(t);
+    this.retry = {};
     for (const u of Object.values(this.unsub)) try { u(); } catch (e) {}
     this.unsub = {};
     for (const c of COLS) this.listenOne(c);
@@ -68,7 +70,9 @@ export class Store {
     this.unsub[c] = this.be.listen(c, since, (docs, fromServer) => this.receive(c, docs, fromServer), err => {
       this.status.error = (err && (err.code || err.message)) || 'sync'; this.emit();
       const next = Math.min(120000, (wait || 10000) * 1.5);
-      setTimeout(() => this.listenOne(c, next), wait || 10000);
+      this.retry = this.retry || {};
+      clearTimeout(this.retry[c]);
+      this.retry[c] = setTimeout(() => this.listenOne(c, next), wait || 10000);
     });
   }
 

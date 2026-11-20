@@ -14,7 +14,7 @@ const cfg = window.JARD_CONFIG || {};
 if (cfg.env) { try { const b = document.createElement('div'); b.textContent = 'نسخة اختبار (' + ((cfg.firebase || {}).projectId || '') + ') بيانات تجريبية فقط'; b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b42318;color:#fff;text-align:center;font:600 12px sans-serif;padding:2px;pointer-events:none'; document.body.appendChild(b); } catch (e) {} }
 const params = new URLSearchParams(location.search);
 const app = $('#app');
-let be = null, store = null, ctx = null, cur = null, unsubStore = null;
+let be = null, store = null, ctx = null, cur = null, unsubStore = null, entered = false;
 
 /* ---------- الصلاحيات ---------- */
 const CASHIER = new Set(['sale', 'sret', 'pur', 'rcpt', 'party-add', 'item-add', 'r-daily', 'r-expiry', 'r-short', 'r-aging']);
@@ -28,6 +28,73 @@ const ERR = {
   'auth/network-request-failed': 'تعذّر الوصول إلى خادم الدخول. تأكد من الإنترنت.'
 };
 const toEmail = u => { u = u.trim().toLowerCase(); return u.includes('@') ? u : u + '@' + (cfg.emailDomain || 'jard.local'); };
+const roleOf = staff => staff && staff.active === true ? (staff.acc || (staff.role === 'admin' ? 'admin' : '')) : '';
+
+/* ---------- الدخول بدون إنترنت ----------
+   بعد كل دخول ناجح بالإنترنت يُحفظ على هذا الجهاز: الاسم والصلاحية، وبصمة مشتقة من كلمة المرور (PBKDF2، لا كلمة المرور نفسها).
+   بلا إنترنت يُقبل الدخول بنفس كلمة المرور لمن دخل على هذا الجهاز بالإنترنت خلال آخر 30 يوماً. السندات تُحفظ على الجهاز،
+   وعند عودة الاتصال يُعاد الدخول للخادم في الخلفية، وتُراجع الصلاحية، وتُرفع السندات. */
+const OFF_DAYS = 30, OFF_IT = 150000;
+let pendingPw = null, offAuth = null, resumeTimer = null;
+const offKey = email => 'pharm.off.' + email;
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const canHash = () => !!(window.crypto && crypto.subtle && window.TextEncoder);
+async function pwHash(pw, salt, it) {
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: Uint8Array.from(atob(salt), c => c.charCodeAt(0)), iterations: it }, k, 256);
+  return b64(bits);
+}
+function offGet(email) { try { return JSON.parse(localStorage.getItem(offKey(email)) || 'null'); } catch (e) { return null; } }
+async function offRemember(uid, email, name, role, pw) {
+  const old = offGet(email);
+  const rec = { uid, name, role, at: Date.now() };
+  if (old && old.uid === uid && old.hash) Object.assign(rec, { salt: old.salt, it: old.it, hash: old.hash });
+  if (pw && canHash()) { try { const salt = b64(crypto.getRandomValues(new Uint8Array(16))); Object.assign(rec, { salt, it: OFF_IT, hash: await pwHash(pw, salt, OFF_IT) }); } catch (e) {} }
+  try { localStorage.setItem(offKey(email), JSON.stringify(rec)); } catch (e) {}
+}
+const netErr = e => !navigator.onLine || /network|unavailable|offline|timeout|deadline/i.test(String((e && (e.code || e.message)) || ''));
+const timeout = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(Object.assign(new Error('timeout'), { code: 'timeout' })), ms))]);
+/** يعيد true إن دخل، أو نص الخطأ */
+async function offlineLogin(email, pw) {
+  const rec = offGet(email);
+  if (!rec || !rec.hash || !canHash()) return 'لا يوجد إنترنت. هذا الحساب لم يدخل على هذا الجهاز بالإنترنت من قبل، فيحتاج الدخول الأول إلى الإنترنت.';
+  if (Date.now() - (rec.at || 0) > OFF_DAYS * 864e5) return 'لا يوجد إنترنت، وآخر دخول بالإنترنت على هذا الجهاز أقدم من ' + OFF_DAYS + ' يوماً. اتصل بالإنترنت مرة للدخول.';
+  let h1 = '';
+  try { h1 = await pwHash(pw, rec.salt, rec.it || OFF_IT); } catch (e) { return 'تعذّر التحقق بدون إنترنت.'; }
+  if (h1 !== rec.hash) return 'اسم المستخدم أو كلمة المرور غير صحيحة.';
+  if (rec.role !== 'admin' && rec.role !== 'cashier') return 'حسابك غير مفعّل في الحسابات.';
+  entered = true; offAuth = { email, pw };
+  await start({ uid: rec.uid, email, name: rec.name || email.split('@')[0], role: rec.role }, true);
+  return true;
+}
+/** بعد الدخول بلا إنترنت: عند عودة الاتصال يُعاد الدخول في الخلفية وتُراجع الصلاحية ثم تُرفع السندات */
+function watchResume() {
+  let busy = false;
+  const tryIt = async () => {
+    if (busy || !navigator.onLine || !ctx) return;
+    busy = true;
+    try {
+      if (offAuth) await timeout(be.signIn(offAuth.email, offAuth.pw), 20000);
+      const st = await timeout(be.getStaff(ctx.user.email), 15000);
+      const role = roleOf(st);
+      if (role !== 'admin' && role !== 'cashier') { toast('أُلغيت صلاحيتك في الحسابات.', { bad: true }); setTimeout(() => ctx.logout(), 2000); return; }
+      await offRemember(ctx.user.uid, ctx.user.email, (st.name || '').trim() || ctx.user.name, role, offAuth && offAuth.pw);
+      offAuth = null; clearInterval(resumeTimer); resumeTimer = null; removeEventListener('online', tryIt);
+      if (role !== ctx.user.role) { location.reload(); return; }
+      store.listen(); store.flush();
+      toast('عاد الاتصال، وتُرفع السندات الآن.');
+    } catch (e) {
+      if (/invalid-credential|wrong-password|user-not-found|user-disabled/.test(String(e && e.code || ''))) {
+        offAuth = null; clearInterval(resumeTimer); resumeTimer = null; removeEventListener('online', tryIt);
+        toast('تغيّرت كلمة المرور أو أُوقف الحساب. سجّل الدخول من جديد، والسندات محفوظة على الجهاز.', { bad: true });
+        setTimeout(() => ctx.logout(), 3000);
+      }
+    } finally { busy = false; }
+  };
+  addEventListener('online', tryIt);
+  resumeTimer = setInterval(tryIt, 60000);
+  setTimeout(tryIt, 3000);
+}
 
 function loginView(msg) {
   const user = h('input', { type: 'text', autocomplete: 'username', autocapitalize: 'off', spellcheck: false, class: 'num', style: { textAlign: 'right' } });
@@ -38,8 +105,18 @@ function loginView(msg) {
     e.preventDefault();
     if (!user.value.trim() || !pass.value) { err.textContent = 'اكتب اسم المستخدم وكلمة المرور.'; return; }
     btn.disabled = true; err.textContent = '';
-    try { await be.signIn(toEmail(user.value), pass.value); pass.value = ''; }
-    catch (x) { err.textContent = ERR[x.code] || ('تعذّر الدخول (' + (x.code || x.message) + ')'); }
+    const email = toEmail(user.value), pw = pass.value;
+    try { pendingPw = pw; await timeout(be.signIn(email, pw), 20000); pass.value = ''; }
+    catch (x) {
+      if (netErr(x)) {
+        // بلا إنترنت: الدخول بما حُفظ على هذا الجهاز من آخر دخول بالإنترنت
+        pendingPw = null;
+        err.textContent = 'لا يوجد إنترنت، جارٍ الدخول من هذا الجهاز…';
+        const r = await offlineLogin(email, pw).catch(e => 'تعذّر الفتح: ' + (e.message || e));
+        if (r === true) return;
+        err.textContent = r;
+      } else { pendingPw = null; err.textContent = ERR[x.code] || ('تعذّر الدخول (' + (x.code || x.message) + ')'); }
+    }
     btn.disabled = false;
   } } },
     h('label', { class: 'field' }, h('span', { class: 'flabel' }, 'اسم المستخدم'), user),
@@ -65,16 +142,34 @@ function ver() { const A = window.JardApp; return A && A.version ? h('p', { clas
 
 async function enter(user) {
   waitView('جارٍ التحقق من الصلاحية…');
+  const email = (user.email || '').toLowerCase(), pw = pendingPw;
+  pendingPw = null;
   let staff = null;
-  try { staff = await be.getStaff((user.email || '').toLowerCase()); }
-  catch (e) { loginView('تعذّر التحقق من الحساب (' + (e.code || e.message) + '). تأكد من الإنترنت.'); return; }
-  const role = staff && staff.active === true ? (staff.acc || (staff.role === 'admin' ? 'admin' : '')) : '';
+  try { staff = await timeout(be.getStaff(email), 15000); }
+  catch (e) {
+    // الدخول محفوظ على الجهاز لكن لا إنترنت: الصلاحية من آخر تحقق بالإنترنت
+    const rec = offGet(email);
+    if (netErr(e) && rec && rec.uid === user.uid && (rec.role === 'admin' || rec.role === 'cashier')) {
+      await start({ uid: user.uid, email, name: rec.name || email.split('@')[0], role: rec.role }, true);
+      return;
+    }
+    entered = false;
+    loginView('تعذّر التحقق من الحساب (' + (e.code || e.message) + '). تأكد من الإنترنت.'); return;
+  }
+  const role = roleOf(staff);
   if (role !== 'admin' && role !== 'cashier') {
     try { await be.signOut(); } catch (e) {}
     loginView('حسابك غير مفعّل في الحسابات. اطلب من المشرف تفعيله.');
     return;
   }
   const u = { uid: user.uid, email: user.email, name: (staff.name || '').trim() || user.email.split('@')[0], role };
+  offRemember(user.uid, email, u.name, role, pw);
+  await start(u, false);
+}
+
+/** فتح البيانات والواجهة لمستخدم تحققت صلاحيته (بالإنترنت، أو من آخر تحقق محفوظ على الجهاز) */
+async function start(u, offline) {
+  const role = u.role;
   waitView('جارٍ فتح البيانات…');
   store = await new Store(be, u).open();
   ctx = {
@@ -88,6 +183,10 @@ async function enter(user) {
   unsubStore = store.on(() => { syncChip(); if (cur && cur.v && cur.v.live) draw(true); });
   addEventListener('hashchange', route);
   route();
+  if (offline) {
+    toast('تعمل بدون إنترنت. السندات تُحفظ على الجهاز وتُرفع عند عودة الاتصال.');
+    watchResume();
+  }
 }
 
 /* ---------- التنقل ---------- */
@@ -234,7 +333,6 @@ async function boot() {
     be = params.get('mock') ? await import('./mock.js') : await import('./fb.js');
     await be.init(cfg.firebase);
   } catch (e) { console.error(e); waitView('تعذّر التشغيل: ' + (e.message || e)); return; }
-  let entered = false;
   be.onAuth(user => {
     if (user && !entered) { entered = true; enter(user).catch(e => { console.error(e); loginView('تعذّر الفتح: ' + (e.message || e)); }); }
     else if (!user) { entered = false; if (unsubStore) unsubStore(); store = null; loginView(); }

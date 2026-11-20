@@ -17,9 +17,11 @@ export async function init() {
   if (p.get('user')) user = { uid: 'u_' + p.get('user'), email: p.get('user') + '@jard.local' };
 }
 export function onAuth(cb) { authCb = cb; setTimeout(() => cb(user), 10); return () => {}; }
-export async function signIn(email) { user = { uid: 'u_' + email.split('@')[0], email }; setTimeout(() => authCb && authCb(user), 0); return user; }
+const mockNet = () => { if (window.__mockOffline || localStorage.getItem('mockOffline')) { const e = new Error('offline'); e.code = 'auth/network-request-failed'; throw e; } };
+export async function signIn(email, pw) { mockNet(); if (pw === 'bad') { const e = new Error('bad'); e.code = 'auth/invalid-credential'; throw e; } user = { uid: 'u_' + email.split('@')[0], email }; setTimeout(() => authCb && authCb(user), 0); return user; }
 export async function signOut() { user = null; if (authCb) authCb(null); }
 export async function getStaff(email) {
+  if (window.__mockOffline || localStorage.getItem('mockOffline')) { const e = new Error('Failed to get document because the client is offline.'); e.code = 'unavailable'; throw e; }
   if (email.startsWith('cashier')) return { name: 'جوهر', role: 'counter', acc: 'cashier', active: true };
   return { name: 'مصطفى', role: 'admin', active: true };
 }
@@ -29,7 +31,7 @@ export function listen(col, since, cb) {
   return () => { listeners = listeners.filter(x => x !== l); };
 }
 export async function put(col, id, data, merge) {
-  if (window.__mockOffline) { const e = new Error('offline'); e.code = 'unavailable'; throw e; }
+  if (window.__mockOffline || localStorage.getItem('mockOffline')) { const e = new Error('offline'); e.code = 'unavailable'; throw e; }
   const cur = db[col].get(id), d = merge && cur ? Object.assign({}, cur.data, data) : data, u = tick();
   db[col].set(id, { data: d, u });
   for (const l of listeners) if (l.col === col) setTimeout(() => l.cb([{ id, data: d, u }], true), 5);

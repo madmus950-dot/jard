@@ -116,9 +116,29 @@ export function itemEdit(ctx, id) {
         k ? h('button', { style: { border: 0, background: 'none', color: 'var(--red)' }, on: { click: () => { S.u.splice(k, 1); drawUnits(); } } }, 'حذف') : null))));
     put(unitsBox, h('p', { class: 'muted', style: { fontSize: '12.5px', margin: '8px 0' } }, 'الوحدة الأولى هي الأساس (العلبة غالباً). الشريط نصف علبة يُكتب 0.5 أو 2، والحبة من 20 حبة تُكتب 20.'));
   }
+  // الشركة اختيارية: تظهر الشركات المحفوظة أثناء الكتابة (الأكثر أصنافاً أولاً) وتُختار بضغطة
+  let COS = null;
+  const companies = () => {
+    if (!COS) { const m = new Map(); for (const it of store.items.values()) { const c = (it.co || '').trim(); if (c) m.set(c, (m.get(c) || 0) + 1); } COS = [...m].sort((a, b) => b[1] - a[1]); }
+    return COS;
+  };
+  const coBox = h('div', { class: 'sugg hide', style: { margin: '6px 0 0' } });
+  const coIn = h('input', { value: S.co || '', placeholder: 'اختياري: اكتب أو اختر من المحفوظة', autocomplete: 'off', on: {
+    input: e => { S.co = e.target.value; drawCo(); }, focus: () => drawCo(),
+    blur: () => setTimeout(() => coBox.classList.add('hide'), 200),
+    keydown: e => { if (e.key === 'Escape') coBox.classList.add('hide'); } } });
+  function drawCo() {
+    coBox.textContent = '';
+    const v = (S.co || '').trim(), n = norm(v);
+    const list = companies().filter(([c]) => !n || norm(c).includes(n)).slice(0, 8);
+    if (!list.length || (list.length === 1 && list[0][0] === v)) { coBox.classList.add('hide'); return; }
+    for (const [c, k] of list) put(coBox, h('button', { type: 'button', on: { mousedown: e => e.preventDefault(), click: () => { S.co = c; coIn.value = c; coBox.classList.add('hide'); } } },
+      h('span', null, h('b', { style: { fontWeight: 500 } }, c)), h('small', { class: 'muted' }, k + ' صنف')));
+    coBox.classList.remove('hide');
+  }
   put(body, 
     field('اسم الصنف', h('input', { value: S.n, on: { input: e => { S.n = e.target.value; } } })),
-    field('الشركة', h('input', { value: S.co || '', on: { input: e => { S.co = e.target.value; } } })),
+    field('الشركة (اختياري)', h('div', null, coIn, coBox)),
     field('الباركود', h('textarea', { rows: 2, class: 'num', style: { textAlign: 'left' }, on: { input: e => { S.bc = e.target.value.split(/[\s,،]+/).filter(Boolean); } } }, (S.bc || []).join('\n')), 'باركود واحد في كل سطر.'),
     h('h3', { class: 'sect' }, 'الوحدات والأسعار'), unitsBox,
     h('button', { class: 'btn ghost wide', on: { click: () => { S.u.push({ n: 'شريط', s: 0.5, p: 0 }); drawUnits(); } } }, icon('plus', 18), 'إضافة وحدة أصغر'),
